@@ -1,0 +1,28 @@
+name: Extract mobile layout manager
+
+on:
+  push:
+    paths:
+      - incoming/mobile-layout-manager-v1.6.1.zip
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract plugin
+        run: |
+          rm -rf plugins/mobile-layout-manager
+          mkdir -p plugins
+          unzip -q -o incoming/mobile-layout-manager-v1.6.1.zip -d /tmp/mlm
+          cp -R /tmp/mlm/mobile-layout-manager plugins/mobile-layout-manager
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugins/mobile-layout-manager
+          git diff --cached --quiet || git commit -m "Add mobile layout manager 1.6.1"
+          git push
