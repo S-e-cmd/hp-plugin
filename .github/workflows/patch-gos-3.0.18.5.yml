@@ -137,3 +137,5 @@ jobs:
           name: garden-opening-status-v3.0.18.5
           path: dist/garden-opening-status-v3.0.18.5.zip
           if-no-files-found: error
+
+# retrigger: uploaded runtime ZIP verified
