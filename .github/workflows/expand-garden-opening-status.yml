@@ -3,7 +3,7 @@ name: Expand garden opening status plugin
 on:
   push:
     paths:
-      - '.staging/garden-opening-status-v3.0.18.4.zip'
+      - '.staging/garden-opening-status-v3.0.18.4.zip.b64/**'
       - '.github/workflows/expand-garden-opening-status.yml'
 
 permissions:
@@ -17,21 +17,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check archive
+      - name: Rebuild archive
         run: |
-          test -f .staging/garden-opening-status-v3.0.18.4.zip
-          unzip -t .staging/garden-opening-status-v3.0.18.4.zip
+          cat .staging/garden-opening-status-v3.0.18.4.zip.b64/part-*.txt > /tmp/garden-opening-status.b64
+          base64 -d /tmp/garden-opening-status.b64 > /tmp/garden-opening-status.zip
+          unzip -t /tmp/garden-opening-status.zip
 
       - name: Expand plugin archive
         run: |
           rm -rf plugins/garden-opening-status
           mkdir -p plugins
-          unzip -q .staging/garden-opening-status-v3.0.18.4.zip -d plugins
+          unzip -q /tmp/garden-opening-status.zip -d plugins
           test -f plugins/garden-opening-status/garden-opening-status.php
-          rm -f .staging/garden-opening-status-v3.0.18.4.zip
 
       - name: Commit expanded plugin
         run: |
+          rm -rf .staging/garden-opening-status-v3.0.18.4.zip.b64
+          rm -f .staging/garden-opening-status-v3.0.18.4.zip
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
