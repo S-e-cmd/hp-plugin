@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.staging/garden-opening-status-v3.0.18.4.zip'
+      - '.github/workflows/expand-garden-opening-status.yml'
 
 permissions:
   contents: write
@@ -13,16 +14,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check archive
+        run: |
+          ls -la .staging
+          test -f .staging/garden-opening-status-v3.0.18.4.zip
+          file .staging/garden-opening-status-v3.0.18.4.zip
+
       - name: Expand plugin archive
         run: |
           rm -rf plugins/garden-opening-status
           mkdir -p plugins
-          unzip -q .staging/garden-opening-status-v3.0.18.4.zip -d plugins
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          archive = Path('.staging/garden-opening-status-v3.0.18.4.zip')
+          with ZipFile(archive) as zf:
+              zf.testzip()
+              zf.extractall('plugins')
+          PY
+          test -f plugins/garden-opening-status/garden-opening-status.php
           rm -f .staging/garden-opening-status-v3.0.18.4.zip
+
       - name: Commit expanded plugin
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plugins/garden-opening-status .staging/garden-opening-status-v3.0.18.4.zip
-          git commit -m "Add garden opening status 3.0.18.4" || exit 0
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Add garden opening status 3.0.18.4"
           git push
