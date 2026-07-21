@@ -19,17 +19,14 @@ jobs:
 
       - name: Check archive
         run: |
-          ls -la .staging
           test -f .staging/garden-opening-status-v3.0.18.4.zip
-          file .staging/garden-opening-status-v3.0.18.4.zip
+          unzip -t .staging/garden-opening-status-v3.0.18.4.zip
 
       - name: Expand plugin archive
         run: |
           rm -rf plugins/garden-opening-status
           mkdir -p plugins
-          base64 -d .staging/garden-opening-status-v3.0.18.4.zip > /tmp/garden-opening-status.zip
-          unzip -t /tmp/garden-opening-status.zip
-          unzip -q /tmp/garden-opening-status.zip -d plugins
+          unzip -q .staging/garden-opening-status-v3.0.18.4.zip -d plugins
           test -f plugins/garden-opening-status/garden-opening-status.php
           rm -f .staging/garden-opening-status-v3.0.18.4.zip
 
