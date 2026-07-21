@@ -27,15 +27,9 @@ jobs:
         run: |
           rm -rf plugins/garden-opening-status
           mkdir -p plugins
-          python3 - <<'PY'
-          from pathlib import Path
-          from zipfile import ZipFile
-
-          archive = Path('.staging/garden-opening-status-v3.0.18.4.zip')
-          with ZipFile(archive) as zf:
-              zf.testzip()
-              zf.extractall('plugins')
-          PY
+          base64 -d .staging/garden-opening-status-v3.0.18.4.zip > /tmp/garden-opening-status.zip
+          unzip -t /tmp/garden-opening-status.zip
+          unzip -q /tmp/garden-opening-status.zip -d plugins
           test -f plugins/garden-opening-status/garden-opening-status.php
           rm -f .staging/garden-opening-status-v3.0.18.4.zip
 
