@@ -1,0 +1,139 @@
+name: Patch garden opening status 3.0.18.5
+
+on:
+  push:
+    branches:
+      - work/garden-opening-status-v3.0.18.5
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/garden-opening-status-v3.0.18.5
+          fetch-depth: 0
+
+      - name: Patch plugin
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          php = Path('plugins/garden-opening-status/garden-opening-status.php')
+          js = Path('plugins/garden-opening-status/assets/admin.js')
+
+          php_text = php.read_text(encoding='utf-8')
+          php_text = php_text.replace('Version: 3.0.18.4', 'Version: 3.0.18.5')
+          php_text = php_text.replace("const VERSION = '3.0.18.4';", "const VERSION = '3.0.18.5';")
+          php.write_text(php_text, encoding='utf-8')
+
+          text = js.read_text(encoding='utf-8')
+
+          old_new = """    const name=(layoutName&&layoutName.value||'').trim();
+    if(!name){layoutMessage('レイアウト名を入力してください。',true);if(layoutName)layoutName.focus();return}
+    const pair=currentDesignPair();
+    const id=makeLayoutId();
+    layoutTemplates[id]={name:name.slice(0,80),desktop:clone(pair.desktop),mobile:clone(pair.mobile)};
+"""
+          new_new = """    const name=(layoutName&&layoutName.value||'').trim();
+    if(!name){layoutMessage('レイアウト名を入力してください。',true);if(layoutName)layoutName.focus();return}
+    const cleanName=name.slice(0,80);
+    const duplicateId=Object.keys(layoutTemplates).find(key=>String(layoutTemplates[key].name||'').trim()===cleanName);
+    if(duplicateId){layoutMessage('同じ名前のレイアウトがすでにあります。既存レイアウトを選択して「上書き」を使用してください。',true);return}
+    const pair=currentDesignPair();
+    const id=makeLayoutId();
+    layoutTemplates[id]={name:cleanName,desktop:clone(pair.desktop),mobile:clone(pair.mobile)};
+"""
+
+          old_overwrite = """  const overwriteButton=document.getElementById('gos3-layout-overwrite');
+  if(overwriteButton)overwriteButton.addEventListener('click',()=>{
+    const id=selectedTemplateId();if(!id||!layoutTemplates[id]){layoutMessage('上書きするレイアウトを選択してください。',true);return}
+    const pair=currentDesignPair();layoutTemplates[id].desktop=clone(pair.desktop);layoutTemplates[id].mobile=clone(pair.mobile);
+    persistLayoutTemplates('「'+layoutTemplates[id].name+'」を上書きしました。',id).catch(()=>{});
+  });
+"""
+          new_overwrite = """  const overwriteButton=document.getElementById('gos3-layout-overwrite');
+  if(overwriteButton)overwriteButton.addEventListener('click',()=>{
+    const id=selectedTemplateId();if(!id||!layoutTemplates[id]){layoutMessage('上書きするレイアウトを選択してください。',true);return}
+    const tpl=layoutTemplates[id];
+    if(!window.confirm('「'+tpl.name+'」を現在のレイアウトで上書きしますか？'))return;
+    const before=clone(tpl);
+    const pair=currentDesignPair();
+    tpl.desktop=clone(pair.desktop);tpl.mobile=clone(pair.mobile);
+    overwriteButton.disabled=true;
+    persistLayoutTemplates('「'+tpl.name+'」を上書きしました。',id)
+      .catch(()=>{layoutTemplates[id]=before;syncTemplatesHidden();renderLayoutTemplates(id)})
+      .finally(()=>{overwriteButton.disabled=false});
+  });
+"""
+
+          old_rename = """  const renameButton=document.getElementById('gos3-layout-rename');
+  if(renameButton)renameButton.addEventListener('click',()=>{
+    const id=selectedTemplateId(),tpl=layoutTemplates[id];if(!tpl){layoutMessage('名前を変更するレイアウトを選択してください。',true);return}
+    const name=window.prompt('新しいレイアウト名',tpl.name||'');if(name===null)return;const clean=name.trim();if(!clean){layoutMessage('名前を入力してください。',true);return}
+    tpl.name=clean.slice(0,80);syncTemplatesHidden();renderLayoutTemplates(id);persistLayoutTemplates('レイアウト名を変更しました。',id).catch(()=>{});
+  });
+"""
+          new_rename = """  const renameButton=document.getElementById('gos3-layout-rename');
+  if(renameButton)renameButton.addEventListener('click',()=>{
+    const id=selectedTemplateId(),tpl=layoutTemplates[id];if(!tpl){layoutMessage('名前を変更するレイアウトを選択してください。',true);return}
+    const name=window.prompt('新しいレイアウト名',tpl.name||'');if(name===null)return;
+    const clean=name.trim().slice(0,80);if(!clean){layoutMessage('名前を入力してください。',true);return}
+    const duplicateId=Object.keys(layoutTemplates).find(key=>key!==id&&String(layoutTemplates[key].name||'').trim()===clean);
+    if(duplicateId){layoutMessage('同じ名前のレイアウトがすでにあります。別の名前を入力してください。',true);return}
+    if(clean===String(tpl.name||'').trim()){layoutMessage('名前は変更されていません。',false);return}
+    const before=tpl.name;
+    tpl.name=clean;syncTemplatesHidden();renderLayoutTemplates(id);renameButton.disabled=true;
+    persistLayoutTemplates('「'+before+'」を「'+clean+'」へ変更しました。',id)
+      .catch(()=>{tpl.name=before;syncTemplatesHidden();renderLayoutTemplates(id)})
+      .finally(()=>{renameButton.disabled=false});
+  });
+"""
+
+          replacements = [
+              (old_new, new_new, 'new save block'),
+              (old_overwrite, new_overwrite, 'overwrite block'),
+              (old_rename, new_rename, 'rename block'),
+          ]
+          for old, new, label in replacements:
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f'Could not find {label}')
+
+          js.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate syntax
+        run: |
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          node --check plugins/garden-opening-status/assets/admin.js
+
+      - name: Commit patched source
+        run: |
+          if git diff --quiet; then
+            echo "No source changes"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add plugins/garden-opening-status/garden-opening-status.php plugins/garden-opening-status/assets/admin.js
+            git commit -m "Fix layout overwrite and rename in 3.0.18.5"
+            git push origin HEAD:work/garden-opening-status-v3.0.18.5
+          fi
+
+      - name: Build WordPress ZIP
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          cd plugins
+          zip -r ../dist/garden-opening-status-v3.0.18.5.zip garden-opening-status
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.0.18.5
+          path: dist/garden-opening-status-v3.0.18.5.zip
+          if-no-files-found: error
