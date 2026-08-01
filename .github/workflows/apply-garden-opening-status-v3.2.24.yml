@@ -1,4 +1,4 @@
-name: Apply garden opening status v3.2.24
+name: Apply garden-opening-status v3.2.24
 
 on:
   push:
@@ -19,126 +19,45 @@ jobs:
           ref: work/garden-opening-status-v3.2.24
           fetch-depth: 0
 
-      - name: Apply v3.2.24 PHP changes
+      - name: Restore verified v3.2.24 package
+        shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          set -euo pipefail
+          git show origin/main:archives/garden-opening-status/v3.2.24/garden-opening-status-v3.2.24.zip.b64.part00 > /tmp/part00
+          git show origin/main:archives/garden-opening-status/v3.2.24/garden-opening-status-v3.2.24.zip.b64.part01 > /tmp/part01
+          cat /tmp/part00 /tmp/part01 \
+            | tr -d '\n\r ' \
+            | base64 --decode \
+            > /tmp/garden-opening-status-v3.2.24.zip
+          echo 'd0753924c9bd576170f98a63a44755d183cd55466c482de73c69ec7b3aa3cc66  /tmp/garden-opening-status-v3.2.24.zip' | sha256sum -c -
+          rm -rf /tmp/gos324
+          mkdir -p /tmp/gos324
+          unzip -q /tmp/garden-opening-status-v3.2.24.zip -d /tmp/gos324
 
-          path = Path('garden-opening-status/garden-opening-status.php')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace('Version: 3.2.23', 'Version: 3.2.24')
-          text = text.replace("const VERSION = '3.2.23';", "const VERSION = '3.2.24';")
-
-          hook = "        add_action('wp_footer', [__CLASS__, 'front_script'], 99);\n"
-          new_hook = hook + "        add_action('template_redirect', [__CLASS__, 'start_event_page_output_buffer'], 0);\n"
-          if 'start_event_page_output_buffer' not in text:
-              if hook not in text:
-                  raise SystemExit('front_script hook not found')
-              text = text.replace(hook, new_hook, 1)
-
-          old_save = """        $sync_result = self::sync_existing_event_pages($clean);
-        set_transient('gos_v3_page_sync_result_' . get_current_user_id(), $sync_result, 5 * MINUTE_IN_SECONDS);
-
-        self::purge_public_caches($clean);
-"""
-          new_save = """        // 公開ページは最終HTMLへ反映するため、固定ページ本文は変更しない。
-        self::purge_public_caches($clean);
-"""
-          if old_save in text:
-              text = text.replace(old_save, new_save, 1)
-
-          text = text.replace("        add_action('admin_notices', [__CLASS__, 'page_sync_admin_notice']);\n", '')
-
-          insert_before = "    private static function event_page_managed_block($event, $season) {\n"
-          methods = r'''    private static function current_event_page_season() {
-        if (is_admin()) return '';
-
-        $page_id = (int)get_queried_object_id();
-        $known_ids = [19 => 'spring', 47 => 'autumn', 49 => 'winter'];
-        if (isset($known_ids[$page_id])) return $known_ids[$page_id];
-
-        $path = trim((string)wp_parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
-        $path_map = [
-            'schedule/spring' => 'spring',
-            'schedule/autumn' => 'autumn',
-            'schedule/winter' => 'winter',
-        ];
-        foreach ($path_map as $suffix => $season) {
-            if ($path === $suffix || str_ends_with($path, '/' . $suffix)) return $season;
-        }
-        return '';
-    }
-
-    public static function start_event_page_output_buffer() {
-        $season = self::current_event_page_season();
-        if ($season === '') return;
-        ob_start([__CLASS__, 'filter_event_page_output']);
-    }
-
-    private static function event_page_output_values($season) {
-        $options = self::options(false);
-        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
-        $date = self::event_overview_date_text($event);
-        $open = self::format_time($event['open_time'] ?? '');
-        $close = self::format_time($event['close_time'] ?? '');
-        $time = trim($open . (($open !== '' && $close !== '') ? '～' : '') . $close);
-        $close_label = trim((string)($event['close_time_label'] ?? ''));
-        if ($time !== '' && $close_label !== '') $time .= '（' . $close_label . '）';
-        $price = trim((string)($event['price_details'] ?? ''));
-        if ($price === '') $price = trim((string)($event['price'] ?? ''));
-        $price_note = trim((string)($event['price_note'] ?? ''));
-        if ($price_note !== '') $price .= ($price !== '' ? "\n" : '') . $price_note;
-        return [
-            'date_label' => trim((string)($event['date_label'] ?? '開苑期間')) ?: '開苑期間',
-            'date' => $date,
-            'time_label' => trim((string)($event['time_label'] ?? '開苑時間')) ?: '開苑時間',
-            'time' => $time,
-            'price_label' => trim((string)($event['admission_label'] ?? '入苑料')) ?: '入苑料',
-            'price' => $price,
-        ];
-    }
-
-    private static function replace_labeled_paragraph($html, $label, $value) {
-        if ($label === '' || $value === '') return $html;
-        $label_pattern = preg_quote($label, '~');
-        $pattern = '~<p\\b([^>]*)>(?:(?!</p>).)*?' . $label_pattern . '\\s*[：:].*?</p>~isu';
-        $replacement = '<p$1><strong>' . esc_html($label) . '：</strong>' . nl2br(esc_html($value)) . '</p>';
-        $updated = preg_replace($pattern, $replacement, $html, 1);
-        return is_string($updated) ? $updated : $html;
-    }
-
-    public static function filter_event_page_output($html) {
-        if (!is_string($html) || $html === '') return $html;
-        $season = self::current_event_page_season();
-        if ($season === '') return $html;
-        $values = self::event_page_output_values($season);
-        $html = self::replace_labeled_paragraph($html, $values['date_label'], $values['date']);
-        $html = self::replace_labeled_paragraph($html, $values['time_label'], $values['time']);
-        $html = self::replace_labeled_paragraph($html, $values['price_label'], $values['price']);
-        return $html;
-    }
-
-'''
-          if 'public static function start_event_page_output_buffer()' not in text:
-              if insert_before not in text:
-                  raise SystemExit('event_page_managed_block insertion point not found')
-              text = text.replace(insert_before, methods + insert_before, 1)
-
-          text = text.replace(
-              '保存すると、「会期情報」配下の春・秋・冬の各固定ページ本文を直接上書きします。',
-              '保存すると、既存ページのレイアウトを維持したまま、公開画面の会期情報だけを更新します。'
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-
-      - name: Validate PHP
-        run: php -l garden-opening-status/garden-opening-status.php
-
-      - name: Commit changes
+      - name: Replace all plugin source files
+        shell: bash
         run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add garden-opening-status/garden-opening-status.php
-          git diff --cached --quiet && exit 0
-          git commit -m "Apply garden opening status v3.2.24"
+          set -euo pipefail
+          cp /tmp/gos324/garden-opening-status/garden-opening-status.php garden-opening-status/garden-opening-status.php
+          cp /tmp/gos324/garden-opening-status/assets/admin.js garden-opening-status/assets/admin.js
+          cp /tmp/gos324/garden-opening-status/assets/admin.css garden-opening-status/assets/admin.css
+          cp /tmp/gos324/garden-opening-status/readme.txt garden-opening-status/readme.txt
+          php -l garden-opening-status/garden-opening-status.php
+          node --check garden-opening-status/assets/admin.js
+
+      - name: Commit v3.2.24 to work branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add garden-opening-status/garden-opening-status.php \
+                  garden-opening-status/assets/admin.js \
+                  garden-opening-status/assets/admin.css \
+                  garden-opening-status/readme.txt
+          if git diff --cached --quiet; then
+            echo 'No source changes detected.'
+            exit 0
+          fi
+          git commit -m 'Update garden-opening-status to v3.2.24'
           git push origin HEAD:work/garden-opening-status-v3.2.24
