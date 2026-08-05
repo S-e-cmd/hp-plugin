@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: 開催状況 自動表示
- * Description: 春・秋・冬の開催情報を一元管理し、トップページの開催状況を自動表示します。
- * Version: 3.0.18.4
+ * Plugin Name: 開催情報・開催状況管理
+ * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
+ * Version: 3.2.73
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.0.18.4';
+    const VERSION = '3.2.73';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -30,11 +30,439 @@ final class Garden_Opening_Status_V3 {
         add_action('admin_post_gos_v3_mobile_preview', [__CLASS__, 'mobile_preview_shell']);
         add_filter('wp_is_mobile', [__CLASS__, 'force_mobile_preview']);
         add_filter('body_class', [__CLASS__, 'body_class']);
+        add_filter('language_attributes', [__CLASS__, 'language_attributes'], 20, 2);
+        add_action('template_redirect', [__CLASS__, 'start_description_output_buffer'], -100);
+        add_action('wp_head', [__CLASS__, 'output_hreflang_links'], 5);
+        add_action('wp_head', [__CLASS__, 'output_facility_structured_data'], 6);
+        add_action('wp_head', [__CLASS__, 'output_event_structured_data'], 7);
+        add_action('wp_head', [__CLASS__, 'output_completed_notice_structured_data'], 8);
+        add_filter('the_content', [__CLASS__, 'prepend_completed_event_notice'], 8);
+        add_filter('the_content', [__CLASS__, 'event_page_preview_content'], 20);
+        add_filter('the_content', [__CLASS__, 'expand_event_info_shortcodes'], 99);
+        add_action('wp_footer', [__CLASS__, 'japanese_access_layout'], 96);
+        add_action('wp_footer', [__CLASS__, 'instagram_gallery_fallback'], 97);
+        add_action('wp_footer', [__CLASS__, 'multilingual_event_info_fallback'], 98);
+        add_action('wp_footer', [__CLASS__, 'event_page_preview_fallback'], 100);
         add_action('wp_head', [__CLASS__, 'boot_hide'], 0);
         add_action('wp_head', [__CLASS__, 'front_styles'], 99);
         add_action('wp_footer', [__CLASS__, 'front_script'], 99);
+        add_action('template_redirect', [__CLASS__, 'start_event_page_output_buffer'], 0);
         add_shortcode('garden_opening_status', [__CLASS__, 'shortcode_status']);
         add_shortcode('garden_event', [__CLASS__, 'shortcode_event']);
+        add_shortcode('garden_event_info', [__CLASS__, 'shortcode_event_info']);
+        add_shortcode('garden_event_overview', [__CLASS__, 'shortcode_event_info']);
+        add_action('admin_menu', [__CLASS__, 'instagram_admin_menu']);
+        add_action('admin_post_gos_instagram_save', [__CLASS__, 'instagram_save']);
+        add_action('admin_post_gos_instagram_refresh', [__CLASS__, 'instagram_refresh_action']);
+        add_action('gos_instagram_cron', [__CLASS__, 'instagram_refresh']);
+        add_filter('cron_schedules', [__CLASS__, 'instagram_cron_schedules']);
+        add_shortcode('garden_instagram_gallery', [__CLASS__, 'shortcode_instagram_gallery']);
+    }
+
+    /**
+     * English / Traditional Chinese pages use the correct document language
+     * without changing the site's global WordPress language setting.
+     */
+    public static function language_attributes($output, $doctype = 'html') {
+        $lang = '';
+        if (is_page('english')) {
+            $lang = 'en';
+        } elseif (is_page('chinese')) {
+            $lang = 'zh-Hant';
+        } elseif (is_front_page()) {
+            $lang = 'ja';
+        }
+
+        if ($lang === '') return $output;
+
+        if (preg_match('/\blang=("|\')[^"\']*\1/i', $output)) {
+            return preg_replace('/\blang=("|\')[^"\']*\1/i', 'lang="' . esc_attr($lang) . '"', $output, 1);
+        }
+
+        return trim($output . ' lang="' . esc_attr($lang) . '"');
+    }
+
+    /**
+     * Normalize description metadata on the Japanese, English, and Traditional
+     * Chinese information pages. The theme and SEO plugin both output description
+     * tags, so the completed HTML is filtered to leave one language-appropriate set.
+     */
+    public static function start_description_output_buffer() {
+        if (is_admin() || (!is_front_page() && !is_page(['english', 'chinese']))) return;
+        ob_start([__CLASS__, 'filter_description_output']);
+    }
+
+    public static function filter_description_output($html) {
+        if (!is_string($html) || $html === '') return $html;
+
+        if (is_page('english')) {
+            $description = 'Ueno Toshogu Peony Garden in central Tokyo presents the Wintertime Peony Festival, Springtime Peony Festival, and Special Festival - Autumn Dahlia Garden.';
+        } elseif (is_page('chinese')) {
+            $description = '上野東照宮牡丹園位於東京都心，舉辦冬季牡丹園、春季牡丹節及特別祭典-秋季大麗花園，並提供參觀與交通資訊。';
+        } else {
+            $description = '上野東照宮の参道内にあるぼたん苑です。「上野・東照宮 冬ぼたん」、春のぼたん祭、ダリア綾なす秋の園を開催し、冬咲きぼたんや春の牡丹、秋のダリアをお楽しみいただけます。';
+        }
+
+        $patterns = [
+            '~<meta\b(?=[^>]*\bname\s*=\s*(["\'])description\1)[^>]*>\s*~i',
+            '~<meta\b(?=[^>]*\bproperty\s*=\s*(["\'])og:description\1)[^>]*>\s*~i',
+            '~<meta\b(?=[^>]*\bname\s*=\s*(["\'])twitter:description\1)[^>]*>\s*~i',
+        ];
+        $html = preg_replace($patterns, '', $html);
+        if (!is_string($html)) return '';
+
+        $meta = "\n<!-- Garden page descriptions -->\n";
+        $meta .= '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
+        $meta .= '<meta property="og:description" content="' . esc_attr($description) . '" />' . "\n";
+        $meta .= '<meta name="twitter:description" content="' . esc_attr($description) . '" />' . "\n";
+
+        if (stripos($html, '</head>') !== false) {
+            return preg_replace('~</head>~i', $meta . '</head>', $html, 1);
+        }
+
+        return $html . $meta;
+    }
+
+    /**
+     * Connect the Japanese, English, and Traditional Chinese information pages.
+     * Canonical URLs remain managed by the existing SEO plugin.
+     */
+    public static function output_hreflang_links() {
+        if (!is_front_page() && !is_page(['english', 'chinese'])) return;
+
+        $urls = [
+            'ja' => home_url('/'),
+            'en' => home_url('/english/'),
+            'zh-Hant' => home_url('/chinese/'),
+            'x-default' => home_url('/'),
+        ];
+
+        echo "\n<!-- Garden language alternates -->\n";
+        foreach ($urls as $hreflang => $url) {
+            printf(
+                '<link rel="alternate" hreflang="%1$s" href="%2$s" />' . "\n",
+                esc_attr($hreflang),
+                esc_url($url)
+            );
+        }
+    }
+
+
+    /**
+     * Output a compact, factual facility profile for search engines and AI systems.
+     * Seasonal opening dates and hours are intentionally excluded here because they
+     * change by event and will be represented separately by Event structured data.
+     */
+    public static function output_facility_structured_data() {
+        if (!is_front_page() && !is_page(['english', 'chinese'])) return;
+
+        $language = 'ja';
+        $name = '上野東照宮ぼたん苑';
+        $description = '上野東照宮の境内にある季節開苑の庭園。春と冬の牡丹、秋のダリアを展示しています。';
+
+        if (is_page('english')) {
+            $language = 'en';
+            $name = 'Ueno Toshogu Peony Garden';
+            $description = 'A seasonal garden within the grounds of Ueno Toshogu Shrine, featuring peonies in spring and winter and dahlias in autumn.';
+        } elseif (is_page('chinese')) {
+            $language = 'zh-Hant';
+            $name = '上野東照宮牡丹園';
+            $description = '位於上野東照宮境內的季節性庭園，春季與冬季展示牡丹，秋季展示大麗花。';
+        }
+
+        $data = [
+            '@context' => 'https://schema.org',
+            '@type' => ['TouristAttraction', 'Park'],
+            '@id' => home_url('/#garden'),
+            'name' => $name,
+            'alternateName' => '上野東照宮ぼたん苑',
+            'description' => $description,
+            'inLanguage' => $language,
+            'url' => home_url('/'),
+            'telephone' => '+81-3-3822-3575',
+            'address' => [
+                '@type' => 'PostalAddress',
+                'postalCode' => '110-0007',
+                'addressRegion' => '東京都',
+                'addressLocality' => '台東区',
+                'streetAddress' => '上野公園9-88',
+                'addressCountry' => 'JP',
+            ],
+            'geo' => [
+                '@type' => 'GeoCoordinates',
+                'latitude' => 35.7147171,
+                'longitude' => 139.7726485,
+            ],
+            'hasMap' => 'https://goo.gl/maps/cDHRnQGCLMpQ8v8T8',
+            'sameAs' => [
+                'https://www.facebook.com/profile.php?id=100063766242032',
+            ],
+        ];
+
+        echo "\n<!-- Garden facility structured data -->\n";
+        echo '<script type="application/ld+json">';
+        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo '</script>' . "\n";
+    }
+
+    /**
+     * Output Event structured data from the confirmed seasonal settings.
+     * Only events whose confirmed dates are released and explicitly displayed on the public site are included.
+     */
+    public static function output_event_structured_data() {
+        $detail_season = self::current_event_page_season();
+        if (!is_front_page() && $detail_season === '') return;
+
+        $options = self::options(false);
+        $now = self::now();
+        $events = [];
+
+        foreach (self::event_keys() as $season) {
+            if ($detail_season !== '' && $season !== $detail_season) continue;
+
+            $event = is_array($options['events'][$season] ?? null)
+                ? $options['events'][$season]
+                : [];
+
+            if (empty($event['enabled'])) continue;
+            if (!self::event_released($event, $now)) continue;
+
+            // 構造化データも公開情報です。管理画面に確定日が入力されていても、
+            // 公開画面で「確定日を表示」が選ばれていない会期は出力しません。
+            $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
+            if ($date_display_mode !== 'confirmed') continue;
+
+            $start_date = trim((string)($event['start'] ?? ''));
+            $end_date = trim((string)($event['end'] ?? ''));
+            if ($start_date === '' || $end_date === '') continue;
+
+            $start = self::dt($start_date, $event['open_time'] ?? '00:00');
+            $end = self::dt($end_date, $event['close_time'] ?? '23:59');
+            if (!$start || !$end || $end < $start) continue;
+
+            $name = trim((string)($event['label'] ?? ''));
+            if ($name === '') continue;
+
+            // Prefer the canonical permalink resolved from the WordPress page.
+            // The saved URL may still use a legacy query form such as ?p=47.
+            $page_id = self::resolve_event_page_id($event, $season);
+            $detail_url = $page_id > 0 ? get_permalink($page_id) : '';
+            if (!$detail_url) {
+                $detail_url = trim((string)($event['detail_url'] ?? ''));
+            }
+            if ($detail_url === '') $detail_url = home_url('/');
+            $detail_url = esc_url_raw($detail_url);
+
+            // This block is emitted only when confirmed dates are publicly displayed.
+            // Use those public dates in the description instead of the usual seasonal period.
+            $description_parts = [
+                $name . 'は' . $start->format('Y年n月j日') . 'から' . $end->format('Y年n月j日') . 'まで開催します。',
+            ];
+            $time_note = trim((string)($event['time_note'] ?? ''));
+            if ($time_note !== '') $description_parts[] = $time_note;
+            $overview_note = trim((string)($event['overview_note'] ?? ''));
+            if ($overview_note !== '') $description_parts[] = $overview_note;
+
+            $item = [
+                '@type' => 'Event',
+                '@id' => trailingslashit($detail_url) . '#event',
+                'name' => $name,
+                'startDate' => $start->format(DATE_ATOM),
+                'endDate' => $end->format(DATE_ATOM),
+                'eventStatus' => 'https://schema.org/EventScheduled',
+                'eventAttendanceMode' => 'https://schema.org/OfflineEventAttendanceMode',
+                'location' => [
+                    '@type' => 'Place',
+                    '@id' => home_url('/#garden'),
+                    'name' => '上野東照宮ぼたん苑',
+                    'address' => [
+                        '@type' => 'PostalAddress',
+                        'postalCode' => '110-0007',
+                        'addressRegion' => '東京都',
+                        'addressLocality' => '台東区',
+                        'streetAddress' => '上野公園9-88',
+                        'addressCountry' => 'JP',
+                    ],
+                ],
+                'organizer' => [
+                    '@type' => 'Organization',
+                    'name' => '上野東照宮ぼたん苑',
+                    'url' => home_url('/'),
+                ],
+                'url' => $detail_url,
+                'mainEntityOfPage' => [
+                    '@type' => 'WebPage',
+                    '@id' => $detail_url,
+                ],
+                'inLanguage' => 'ja',
+            ];
+
+            if ($description_parts) {
+                $item['description'] = implode(' ', $description_parts);
+            }
+
+            $page_id = self::resolve_event_page_id($event, $season);
+            if ($page_id > 0) {
+                $image = get_the_post_thumbnail_url($page_id, 'full');
+                if ($image) $item['image'] = [$image];
+            }
+
+            $price_text = trim((string)($event['price'] ?? ''));
+            if ($price_text === '') $price_text = trim((string)($event['price_details'] ?? ''));
+            if ($price_text !== '' && preg_match('/([0-9][0-9,]*)\s*円/u', $price_text, $match)) {
+                $price = str_replace(',', '', $match[1]);
+                $item['offers'] = [
+                    '@type' => 'Offer',
+                    'url' => $detail_url,
+                    'price' => $price,
+                    'priceCurrency' => 'JPY',
+                    'availability' => 'https://schema.org/InStock',
+                    'validFrom' => $start->format(DATE_ATOM),
+                ];
+            }
+
+            $events[] = $item;
+        }
+
+        if (!$events) return;
+
+        $data = [
+            '@context' => 'https://schema.org',
+            '@graph' => $events,
+        ];
+
+        echo "\n<!-- Garden event structured data -->\n";
+        echo '<script type="application/ld+json">';
+        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo '</script>' . "\n";
+    }
+
+    /**
+     * Identify an old seasonal opening announcement whose stated end date has
+     * passed. The permanent seasonal page remains the source for current dates,
+     * hours and admission information.
+     */
+    private static function completed_notice_context() {
+        static $resolved = false;
+        static $context = [];
+        if ($resolved) return $context;
+        $resolved = true;
+
+        if (is_admin() || !is_singular()) return [];
+        $post_id = get_queried_object_id();
+        if ($post_id <= 0) return [];
+
+        $post = get_post($post_id);
+        if (!$post instanceof WP_Post) return [];
+
+        $title = wp_strip_all_tags((string)$post->post_title);
+        if (!preg_match('/開催(?:予定)?(?:のお知らせ|について)?/u', $title)) return [];
+        if (preg_match('/フォトコンテスト|販売|講座|教室|夜間|ライトアップ/u', $title)) return [];
+
+        $season = '';
+        if (preg_match('/春のぼたん祭/u', $title)) {
+            $season = 'spring';
+        } elseif (preg_match('/ダリア綾なす秋の園|ダリア展/u', $title)) {
+            $season = 'autumn';
+        } elseif (preg_match('/冬ぼたん|冬のぼたん|冬咲きぼたん/u', $title)) {
+            $season = 'winter';
+        }
+        if ($season === '') return [];
+
+        $plain = html_entity_decode(
+            wp_strip_all_tags(strip_shortcodes((string)$post->post_content)),
+            ENT_QUOTES,
+            get_bloginfo('charset') ?: 'UTF-8'
+        );
+        $pattern = '/(20\d{2})\s*(?:年|[\/.\-])\s*(\d{1,2})\s*(?:月|[\/.\-])\s*(\d{1,2})\s*日?(?:\s*[\(（][^\)）]*[\)）])?\s*[~〜～－—–]\s*(?:(20\d{2})\s*(?:年|[\/.\-])\s*)?(\d{1,2})\s*(?:月|[\/.\-])\s*(\d{1,2})\s*日?/u';
+        if (!preg_match($pattern, $plain, $match)) return [];
+
+        $start_year = (int)$match[1];
+        $start_month = (int)$match[2];
+        $start_day = (int)$match[3];
+        $end_year = !empty($match[4]) ? (int)$match[4] : $start_year;
+        $end_month = (int)$match[5];
+        $end_day = (int)$match[6];
+        if (empty($match[4]) && $end_month < $start_month) $end_year++;
+        if (!checkdate($start_month, $start_day, $start_year) || !checkdate($end_month, $end_day, $end_year)) return [];
+
+        $timezone = wp_timezone();
+        $start = new DateTimeImmutable(sprintf('%04d-%02d-%02d 00:00:00', $start_year, $start_month, $start_day), $timezone);
+        $end = new DateTimeImmutable(sprintf('%04d-%02d-%02d 23:59:59', $end_year, $end_month, $end_day), $timezone);
+        if (self::now() <= $end) return [];
+
+        $options = self::options(false);
+        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+        $page_id = self::resolve_event_page_id($event, $season);
+        $current_url = $page_id > 0 ? get_permalink($page_id) : trim((string)($event['detail_url'] ?? ''));
+        if (!$current_url) $current_url = home_url('/schedule/');
+
+        $label = trim((string)($event['label'] ?? ''));
+        if ($label === '') $label = preg_replace('/\s*開催(?:予定)?(?:のお知らせ|について)?\s*$/u', '', $title);
+
+        $context = [
+            'post_id' => $post_id,
+            'season' => $season,
+            'name' => $label,
+            'start' => $start,
+            'end' => $end,
+            'notice_url' => get_permalink($post_id),
+            'current_url' => esc_url_raw($current_url),
+        ];
+        return $context;
+    }
+
+    /** Add a visible, crawlable end notice and point visitors to the current source. */
+    public static function prepend_completed_event_notice($content) {
+        if (!is_string($content) || !in_the_loop() || !is_main_query()) return $content;
+        $context = self::completed_notice_context();
+        if (!$context) return $content;
+
+        $ended = $context['end']->format('Y年n月j日');
+        $notice = '<aside class="gos-completed-event-notice" aria-label="終了した開催情報">';
+        $notice .= '<strong>この開催は終了しました</strong>';
+        $notice .= '<p>掲載している内容は過去の開催記録です（' . esc_html($ended) . '終了）。現在の開催期間・開苑時間・入苑料は、<a href="' . esc_url($context['current_url']) . '">最新の会期情報</a>をご確認ください。</p>';
+        $notice .= '</aside>';
+        $notice .= '<style>.gos-completed-event-notice{margin:0 0 28px;padding:16px 18px;border:1px solid #bbb;border-left:5px solid #777;background:#f7f7f7;line-height:1.7}.gos-completed-event-notice strong{display:block;font-size:1.08em}.gos-completed-event-notice p{margin:6px 0 0}</style>';
+        return $notice . $content;
+    }
+
+    /** Describe an archived announcement as a completed event for machines. */
+    public static function output_completed_notice_structured_data() {
+        $context = self::completed_notice_context();
+        if (!$context) return;
+
+        echo '<link rel="related" href="' . esc_url($context['current_url']) . '" />' . "\n";
+        $data = [
+            '@context' => 'https://schema.org',
+            '@type' => 'Event',
+            '@id' => trailingslashit($context['notice_url']) . '#event',
+            'name' => $context['name'],
+            'startDate' => $context['start']->format(DATE_ATOM),
+            'endDate' => $context['end']->format(DATE_ATOM),
+            'eventStatus' => 'https://schema.org/EventCompleted',
+            'eventAttendanceMode' => 'https://schema.org/OfflineEventAttendanceMode',
+            'description' => '終了した過去の開催情報です。現在の開催情報は固定会期ページをご確認ください。',
+            'url' => $context['notice_url'],
+            'mainEntityOfPage' => [
+                '@type' => 'WebPage',
+                '@id' => $context['notice_url'],
+            ],
+            'location' => [
+                '@type' => 'Place',
+                '@id' => home_url('/#garden'),
+                'name' => '上野東照宮ぼたん苑',
+            ],
+            'organizer' => [
+                '@type' => 'Organization',
+                'name' => '上野東照宮ぼたん苑',
+                'url' => home_url('/'),
+            ],
+            'inLanguage' => 'ja',
+        ];
+        echo '<script type="application/ld+json">';
+        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo '</script>' . "\n";
     }
 
     private static function state_keys() {
@@ -169,6 +597,17 @@ final class Garden_Opening_Status_V3 {
             'open_time' => '09:00',
             'close_time' => '17:00',
             'price' => '',
+            'overview_enabled' => 1,
+            'overview_heading' => '会期情報',
+            'date_label' => '開苑期間',
+            'date_display_mode' => 'auto',
+            'time_label' => '開苑時間',
+            'close_time_label' => '入苑締切',
+            'time_note' => '',
+            'admission_label' => '入苑料',
+            'price_details' => '',
+            'price_note' => '',
+            'overview_note' => '',
             'detail_url' => '',
             'publish_mode' => 'immediate',
             'publish_at' => '',
@@ -373,7 +812,7 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function admin_menu() {
-        add_menu_page('開催状況', '開催状況', 'manage_options', 'garden-opening-status', [__CLASS__, 'admin_page'], 'dashicons-calendar-alt', 25);
+        add_menu_page('開催情報管理', '開催情報管理', 'manage_options', 'garden-opening-status', [__CLASS__, 'admin_page'], 'dashicons-calendar-alt', 25);
     }
 
     public static function admin_assets($hook) {
@@ -390,6 +829,515 @@ final class Garden_Opening_Status_V3 {
         ]);
     }
 
+
+    private static function resolve_event_page_id($event, $season) {
+        // まず管理画面の詳細ページURLを優先する。
+        $url = trim((string)($event['detail_url'] ?? ''));
+        if ($url !== '') {
+            $post_id = url_to_postid($url);
+            if ($post_id) return (int)$post_id;
+
+            $path = trim((string)wp_parse_url($url, PHP_URL_PATH), '/');
+            if ($path !== '') {
+                $page = get_page_by_path($path, OBJECT, 'page');
+                if ($page) return (int)$page->ID;
+            }
+        }
+
+        // 「会期情報」配下の各会期ページをタイトルで特定する。
+        $title_candidates = [
+            'spring' => ['春のぼたん祭'],
+            'autumn' => ['ダリア綾なす秋の園', 'ダリア綾なす秋の庭'],
+            'winter' => ['上野・東照宮 冬ぼたん', '上野・東照宮 冬のぼたん'],
+        ];
+
+        $parent = get_page_by_title('会期情報', OBJECT, 'page');
+        foreach (($title_candidates[$season] ?? []) as $title) {
+            $pages = get_posts([
+                'post_type' => 'page',
+                'post_status' => ['publish', 'private', 'draft'],
+                'posts_per_page' => -1,
+                'title' => $title,
+                'orderby' => 'ID',
+                'order' => 'ASC',
+                'suppress_filters' => false,
+            ]);
+            foreach ($pages as $page) {
+                if (!$parent || (int)$page->post_parent === (int)$parent->ID) {
+                    return (int)$page->ID;
+                }
+            }
+        }
+
+        // 現在のサイト構成に対する最終フォールバック。
+        // タイトルが一致することを確認してから使用する。
+        $known_ids = ['spring' => 19, 'autumn' => 47, 'winter' => 49];
+        $known_id = (int)($known_ids[$season] ?? 0);
+        if ($known_id) {
+            $page = get_post($known_id);
+            if ($page && $page->post_type === 'page') {
+                foreach (($title_candidates[$season] ?? []) as $title) {
+                    if (trim(wp_strip_all_tags($page->post_title)) === $title) {
+                        return $known_id;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private static function normalize_event_page_path($value) {
+        $path = (string)wp_parse_url((string)$value, PHP_URL_PATH);
+        return trim(rawurldecode($path), '/');
+    }
+
+    private static function current_event_page_season() {
+        if (is_admin()) return '';
+
+        $page_id = (int)get_queried_object_id();
+        $request_path = self::normalize_event_page_path($_SERVER['REQUEST_URI'] ?? '');
+
+        // 管理画面で各会期に設定された詳細ページURLを最優先で照合する。
+        $options = self::options();
+        foreach (self::event_keys() as $season) {
+            $event = is_array($options['events'][$season] ?? null)
+                ? $options['events'][$season]
+                : [];
+
+            $detail_path = self::normalize_event_page_path($event['detail_url'] ?? '');
+            if ($detail_path !== '' && $request_path === $detail_path) {
+                return $season;
+            }
+        }
+
+        // 現在運用中の固定ページID。
+        $known_ids = [
+            19 => 'spring',
+            47 => 'autumn',
+            49 => 'winter',
+        ];
+        if (isset($known_ids[$page_id])) return $known_ids[$page_id];
+
+        // URL末尾による互換判定。ページ構成変更後も判定できるよう複数候補を持つ。
+        $path_candidates = [
+            'spring' => [
+                'schedule/spring',
+                'spring',
+            ],
+            'autumn' => [
+                'schedule/autumn',
+                'schedule/dahlia',
+                'autumn',
+                'dahlia',
+            ],
+            'winter' => [
+                'schedule/winter',
+                'winter',
+            ],
+        ];
+        foreach ($path_candidates as $season => $candidates) {
+            foreach ($candidates as $candidate) {
+                if (
+                    $request_path === $candidate
+                    || substr($request_path, -strlen('/' . $candidate)) === '/' . $candidate
+                ) {
+                    return $season;
+                }
+            }
+        }
+
+        // 最終手段として、固定ページのスラッグとタイトルから判定する。
+        $post = get_queried_object();
+        if ($post instanceof WP_Post) {
+            $slug = sanitize_title((string)$post->post_name);
+            $title = wp_strip_all_tags((string)$post->post_title);
+
+            if (
+                strpos($slug, 'spring') !== false
+                || strpos($title, '春') !== false
+            ) return 'spring';
+
+            if (
+                strpos($slug, 'autumn') !== false
+                || strpos($slug, 'dahlia') !== false
+                || strpos($title, '秋') !== false
+                || strpos($title, 'ダリア') !== false
+            ) return 'autumn';
+
+            if (
+                strpos($slug, 'winter') !== false
+                || strpos($title, '冬') !== false
+            ) return 'winter';
+        }
+
+        return '';
+    }
+
+    public static function start_event_page_output_buffer() {
+        $season = self::current_event_page_season();
+        if ($season === '') return;
+        ob_start([__CLASS__, 'filter_event_page_output']);
+    }
+
+    private static function event_page_output_values($season) {
+        $options = self::options(false);
+        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+
+        $date = self::event_overview_date_text($event);
+
+        $open = self::format_time($event['open_time'] ?? '');
+        $close = self::format_time($event['close_time'] ?? '');
+        $time = trim($open . (($open !== '' && $close !== '') ? '～' : '') . $close);
+        $close_label = trim((string)($event['close_time_label'] ?? ''));
+        if ($time !== '' && $close_label !== '') $time .= '（' . $close_label . '）';
+
+        $price = trim((string)($event['price_details'] ?? ''));
+        if ($price === '') $price = trim((string)($event['price'] ?? ''));
+        $price_note = trim((string)($event['price_note'] ?? ''));
+        if ($price_note !== '') $price .= ($price !== '' ? "\n" : '') . $price_note;
+
+        return [
+            'date_label' => trim((string)($event['date_label'] ?? '開苑期間')) ?: '開苑期間',
+            'date' => $date,
+            'time_label' => trim((string)($event['time_label'] ?? '開苑時間')) ?: '開苑時間',
+            'time' => $time,
+            'price_label' => trim((string)($event['admission_label'] ?? '入苑料')) ?: '入苑料',
+            'price' => $price,
+        ];
+    }
+
+    private static function label_aliases($type, $configured_label = '') {
+        $aliases = [];
+
+        if ($configured_label !== '') {
+            $aliases[] = $configured_label;
+        }
+
+        if ($type === 'date') {
+            $aliases[] = '開苑期間';
+            $aliases[] = '開催期間';
+            $aliases[] = '会期';
+        } elseif ($type === 'time') {
+            $aliases[] = '開苑時間';
+            $aliases[] = '開催時間';
+            $aliases[] = '開園時間';
+        } elseif ($type === 'price') {
+            $aliases[] = '入苑料';
+            $aliases[] = '入園料';
+            $aliases[] = '料金';
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', $aliases))));
+    }
+
+    private static function replace_labeled_paragraph($html, $labels, $output_label, $value) {
+        if ($output_label === '' || $value === '') return $html;
+        if (!is_array($labels)) $labels = [$labels];
+
+        foreach ($labels as $label) {
+            if ($label === '') continue;
+
+            $label_pattern = preg_quote($label, '~');
+            $pattern = '~<p\b([^>]*)>(?:(?!</p>).)*?'
+                . $label_pattern
+                . '\s*[：:].*?</p>~isu';
+
+            $replacement = '<p$1><strong style="display:inline-block;width:7.5em;font-weight:400;vertical-align:top;">'
+                . esc_html($output_label)
+                . '：</strong><span style="display:inline-block;vertical-align:top;">'
+                . nl2br(esc_html($value))
+                . '</span></p>';
+
+            $updated = preg_replace($pattern, $replacement, $html, 1, $count);
+            if (is_string($updated) && $count > 0) {
+                return $updated;
+            }
+        }
+
+        return $html;
+    }
+
+    private static function has_labeled_paragraph($html, $labels) {
+        if (!is_array($labels)) $labels = [$labels];
+
+        foreach ($labels as $label) {
+            if ($label === '') continue;
+
+            if (preg_match(
+                '~<p\b[^>]*>(?:(?!</p>).)*?'
+                . preg_quote($label, '~')
+                . '\s*[：:]~isu',
+                $html
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function insert_labeled_paragraph_after($html, $after_labels, $label, $value) {
+        if ($label === '' || $value === '') return $html;
+        if (!is_array($after_labels)) $after_labels = [$after_labels];
+
+        foreach ($after_labels as $after_label) {
+            if ($after_label === '') continue;
+
+            $pattern = '~(<p\b([^>]*)>(?:(?!</p>).)*?'
+                . preg_quote($after_label, '~')
+                . '\s*[：:].*?</p>)~isu';
+
+            $paragraph = '<p$2><strong style="display:inline-block;width:7.5em;font-weight:400;vertical-align:top;">'
+                . esc_html($label)
+                . '：</strong><span style="display:inline-block;vertical-align:top;">'
+                . nl2br(esc_html($value))
+                . '</span></p>';
+
+            $updated = preg_replace($pattern, '$1' . $paragraph, $html, 1, $count);
+            if (is_string($updated) && $count > 0) {
+                return $updated;
+            }
+        }
+
+        return $html;
+    }
+
+    public static function filter_event_page_output($html) {
+        if (!is_string($html) || $html === '') return $html;
+
+        $season = self::current_event_page_season();
+        if ($season === '') return $html;
+
+        $values = self::event_page_output_values($season);
+
+        $date_labels = self::label_aliases('date', $values['date_label']);
+        $time_labels = self::label_aliases('time', $values['time_label']);
+        $price_labels = self::label_aliases('price', $values['price_label']);
+
+        $html = self::replace_labeled_paragraph(
+            $html,
+            $date_labels,
+            $values['date_label'],
+            $values['date']
+        );
+        $html = self::replace_labeled_paragraph(
+            $html,
+            $time_labels,
+            $values['time_label'],
+            $values['time']
+        );
+        $html = self::replace_labeled_paragraph(
+            $html,
+            $price_labels,
+            $values['price_label'],
+            $values['price']
+        );
+
+        // 時間行が存在しない場合のみ、期間行の直後へ追加する。
+        if (!self::has_labeled_paragraph($html, $time_labels)) {
+            $html = self::insert_labeled_paragraph_after(
+                $html,
+                $date_labels,
+                $values['time_label'],
+                $values['time']
+            );
+        }
+
+        // 料金行が存在しない場合のみ、時間行の直後へ追加する。
+        // 秋・冬ページのように元の固定ページに料金段落がない場合も反映する。
+        if (!self::has_labeled_paragraph($html, $price_labels)) {
+            $html = self::insert_labeled_paragraph_after(
+                $html,
+                $time_labels,
+                $values['price_label'],
+                $values['price']
+            );
+        }
+
+        return $html;
+    }
+
+    private static function event_page_managed_block($event, $season) {
+        $heading = trim((string)($event['overview_heading'] ?? '会期情報'));
+        if ($heading === '') $heading = '会期情報';
+
+        $date_text = self::event_overview_date_text($event);
+        $open_text = self::format_time($event['open_time'] ?? '');
+        $close_text = self::format_time($event['close_time'] ?? '');
+        $time_text = trim($open_text . (($open_text && $close_text) ? '～' : '') . $close_text);
+        $close_label = trim((string)($event['close_time_label'] ?? ''));
+        if ($time_text !== '' && $close_label !== '') $time_text .= '（' . $close_label . '）';
+
+        $date_label = trim((string)($event['date_label'] ?? '開苑期間')) ?: '開苑期間';
+        $time_label = trim((string)($event['time_label'] ?? '開苑時間')) ?: '開苑時間';
+        $price_label = trim((string)($event['admission_label'] ?? '入苑料')) ?: '入苑料';
+        $price = trim((string)($event['price_details'] ?? ''));
+        if ($price === '') $price = trim((string)($event['price'] ?? ''));
+
+        $parts = [];
+        $parts[] = '<!-- gos:event-info:start season=' . esc_attr($season) . ' -->';
+        $parts[] = '<!-- wp:heading -->';
+        $parts[] = '<h2 class="wp-block-heading">' . esc_html($heading) . '</h2>';
+        $parts[] = '<!-- /wp:heading -->';
+
+        if ($date_text !== '') {
+            $parts[] = '<!-- wp:paragraph -->';
+            $parts[] = '<p><strong>' . esc_html($date_label) . '：</strong>' . esc_html($date_text) . '</p>';
+            $parts[] = '<!-- /wp:paragraph -->';
+        }
+        if ($time_text !== '') {
+            $parts[] = '<!-- wp:paragraph -->';
+            $parts[] = '<p><strong>' . esc_html($time_label) . '：</strong>' . esc_html($time_text) . '</p>';
+            $parts[] = '<!-- /wp:paragraph -->';
+        }
+        if ($price !== '') {
+            $parts[] = '<!-- wp:paragraph -->';
+            $parts[] = '<p><strong>' . esc_html($price_label) . '：</strong>' . nl2br(esc_html($price)) . '</p>';
+            $parts[] = '<!-- /wp:paragraph -->';
+        }
+
+        $price_note = trim((string)($event['price_note'] ?? ''));
+        if ($price_note !== '') {
+            $parts[] = '<!-- wp:paragraph -->';
+            $parts[] = '<p>' . nl2br(esc_html($price_note)) . '</p>';
+            $parts[] = '<!-- /wp:paragraph -->';
+        }
+
+        $overview_note = trim((string)($event['overview_note'] ?? ''));
+        if ($overview_note !== '') {
+            $parts[] = '<!-- wp:paragraph -->';
+            $parts[] = '<p>' . nl2br(esc_html($overview_note)) . '</p>';
+            $parts[] = '<!-- /wp:paragraph -->';
+        }
+
+        $parts[] = '<!-- gos:event-info:end -->';
+        return implode("\n", $parts);
+    }
+
+    private static function replace_existing_event_section($content, $block, $season) {
+        $marker_pattern = '~<!--\s*gos:event-info:start\s+season=' . preg_quote($season, '~') . '\s*-->.*?<!--\s*gos:event-info:end\s*-->~su';
+        if (preg_match($marker_pattern, $content)) {
+            return preg_replace($marker_pattern, $block, $content, 1);
+        }
+
+        // 旧ショートコードが残っている場合は、その位置を直接置換。
+        $shortcode_pattern = '~\[garden_event_(?:info|overview)\s+[^\]]*season=["\\\']?' . preg_quote($season, '~') . '["\\\']?[^\]]*\]~iu';
+        if (preg_match($shortcode_pattern, $content)) {
+            return preg_replace($shortcode_pattern, $block, $content, 1);
+        }
+
+        // 現行ページの静的な「会期情報」欄を特定する。
+        $labels = ['開苑期間', '開催期間'];
+        $label_pos = false;
+        foreach ($labels as $label) {
+            $pos = mb_strpos($content, $label);
+            if ($pos !== false && ($label_pos === false || $pos < $label_pos)) $label_pos = $pos;
+        }
+        if ($label_pos === false) return new WP_Error('event_section_not_found', '既存ページ内に「開苑期間」または「開催期間」が見つかりません。');
+
+        $byte_label_pos = strlen(mb_substr($content, 0, $label_pos));
+
+        // 対象ラベル直前の「会期情報」見出しブロックから開始。
+        $prefix = substr($content, 0, $byte_label_pos);
+        $start = false;
+        if (preg_match_all('~<!--\s*wp:heading\b.*?-->.*?<h[1-6][^>]*>\s*会期情報\s*</h[1-6]>.*?<!--\s*/wp:heading\s*-->~su', $prefix, $m, PREG_OFFSET_CAPTURE)) {
+            $last = end($m[0]);
+            $start = (int)$last[1];
+        }
+        if ($start === false && preg_match_all('~<h[1-6][^>]*>\s*会期情報\s*</h[1-6]>~su', $prefix, $m, PREG_OFFSET_CAPTURE)) {
+            $last = end($m[0]);
+            $start = (int)$last[1];
+        }
+        if ($start === false) {
+            // 見出しが取れない場合は、該当段落ブロックから開始。
+            $candidate = strrpos($prefix, '<!-- wp:paragraph');
+            if ($candidate !== false) $start = $candidate;
+        }
+        if ($start === false) return new WP_Error('event_section_start_not_found', '会期情報欄の開始位置を特定できません。');
+
+        // 次の画像・見出し・ギャラリー等の主要ブロック直前までを既存会期情報欄とする。
+        $tail = substr($content, $byte_label_pos);
+        $end_rel = false;
+        $boundaries = [
+            '~<!--\s*wp:(?:image|gallery|heading|columns|media-text|cover)\b~u',
+            '~<h[1-6][^>]*>\s*見どころ\s*</h[1-6]>~u',
+        ];
+        foreach ($boundaries as $pattern) {
+            if (preg_match($pattern, $tail, $m, PREG_OFFSET_CAPTURE)) {
+                $candidate = (int)$m[0][1];
+                if ($candidate > 0 && ($end_rel === false || $candidate < $end_rel)) $end_rel = $candidate;
+            }
+        }
+        if ($end_rel === false) {
+            // 最低限、料金段落の終了までは置換する。
+            if (preg_match('~入苑料.*?</p>(?:\s*<!--\s*/wp:paragraph\s*-->)?~su', $tail, $m, PREG_OFFSET_CAPTURE)) {
+                $end_rel = (int)$m[0][1] + strlen($m[0][0]);
+            }
+        }
+        if ($end_rel === false) return new WP_Error('event_section_end_not_found', '会期情報欄の終了位置を特定できません。');
+
+        $end = $byte_label_pos + $end_rel;
+        return substr($content, 0, $start) . $block . "\n\n" . substr($content, $end);
+    }
+
+    private static function sync_existing_event_pages($options) {
+        $result = ['updated' => [], 'errors' => []];
+        foreach (self::event_keys() as $season) {
+            $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+            $post_id = self::resolve_event_page_id($event, $season);
+            if (!$post_id) {
+                $result['errors'][$season] = '詳細ページURLから固定ページを特定できません。';
+                continue;
+            }
+
+            $post = get_post($post_id);
+            if (!$post || !in_array($post->post_type, ['page', 'post'], true)) {
+                $result['errors'][$season] = '更新対象が固定ページまたは投稿ではありません。';
+                continue;
+            }
+
+            // 各会期ページは専用ページなので、本文全体を管理画面の内容で上書きする。
+            $new_content = self::event_page_managed_block($event, $season);
+            $updated = wp_update_post([
+                'ID' => $post_id,
+                'post_content' => wp_slash($new_content),
+            ], true);
+            if (is_wp_error($updated)) {
+                $result['errors'][$season] = $updated->get_error_message();
+                continue;
+            }
+
+            clean_post_cache($post_id);
+            $result['updated'][$season] = [
+                'post_id' => $post_id,
+                'title' => get_the_title($post_id),
+            ];
+        }
+        return $result;
+    }
+
+    public static function page_sync_admin_notice() {
+        if (!current_user_can('manage_options')) return;
+        $key = 'gos_v3_page_sync_result_' . get_current_user_id();
+        $result = get_transient($key);
+        if (!is_array($result)) return;
+        delete_transient($key);
+
+        $labels = ['spring' => '春', 'autumn' => '秋', 'winter' => '冬'];
+        foreach (($result['updated'] ?? []) as $season => $item) {
+            echo '<div class="notice notice-success is-dismissible"><p>'
+                . esc_html(($labels[$season] ?? $season) . 'の既存ページ「' . ($item['title'] ?? '') . '」を更新しました。')
+                . '</p></div>';
+        }
+        foreach (($result['errors'] ?? []) as $season => $message) {
+            echo '<div class="notice notice-error"><p>'
+                . esc_html(($labels[$season] ?? $season) . 'の既存ページを更新できませんでした：' . $message)
+                . '</p></div>';
+        }
+
+    }
+
     public static function handle_save() {
         if (!is_admin() || empty($_POST['gos_v3_action'])) return;
         if (!current_user_can('manage_options')) wp_die('権限がありません。');
@@ -397,8 +1345,64 @@ final class Garden_Opening_Status_V3 {
         $clean = self::sanitize_payload(wp_unslash($_POST));
         update_option(self::OPTION, $clean, false);
         update_option(self::VERSION_OPTION, self::VERSION, false);
+
+        // 公開ページは最終HTMLへ反映するため、固定ページ本文は変更しない。
+        self::purge_public_caches($clean);
         wp_safe_redirect(add_query_arg(['page' => 'garden-opening-status', 'updated' => '1'], admin_url('admin.php')));
         exit;
+    }
+
+    private static function purge_public_caches($options) {
+        $urls = [home_url('/')];
+        if (!empty($options['events']) && is_array($options['events'])) {
+            foreach ($options['events'] as $event) {
+                $url = trim((string)($event['detail_url'] ?? ''));
+                if ($url !== '') $urls[] = $url;
+            }
+        }
+
+        foreach (array_unique($urls) as $url) {
+            $post_id = url_to_postid($url);
+            if ($post_id) clean_post_cache($post_id);
+            if (has_action('litespeed_purge_url')) do_action('litespeed_purge_url', $url);
+        }
+
+        // URL設定に依存せず、ショートコードを含む固定ページを必ず対象にする。
+        $shortcode_pages = get_posts([
+            'post_type' => ['page', 'post'],
+            'post_status' => ['publish', 'private', 'draft'],
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            's' => '[garden_event_info',
+            'no_found_rows' => true,
+            'suppress_filters' => false,
+        ]);
+        foreach ($shortcode_pages as $page_id) {
+            $content = (string)get_post_field('post_content', $page_id);
+            if (strpos($content, '[garden_event_info') === false) continue;
+            clean_post_cache($page_id);
+            $page_url = get_permalink($page_id);
+            if ($page_url && has_action('litespeed_purge_url')) {
+                do_action('litespeed_purge_url', $page_url);
+            }
+            if ($page_url && function_exists('rocket_clean_files')) {
+                rocket_clean_files([$page_url]);
+            }
+        }
+
+        wp_cache_delete(self::OPTION, 'options');
+        wp_cache_delete('alloptions', 'options');
+        if (function_exists('wp_cache_flush')) wp_cache_flush();
+
+        // よく使われるページキャッシュ系プラグインが存在する場合のみ実行。
+        if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+        if (function_exists('w3tc_flush_all')) w3tc_flush_all();
+        if (function_exists('do_action') && has_action('litespeed_purge_all')) do_action('litespeed_purge_all');
+        if (function_exists('wp_cache_clear_cache')) wp_cache_clear_cache();
+        if (function_exists('wp_cache_flush')) wp_cache_flush();
+        if (function_exists('opcache_reset')) @opcache_reset();
+
+        do_action('garden_opening_status_saved', $options);
     }
 
     private static function sanitize_payload($input) {
@@ -426,6 +1430,17 @@ final class Garden_Opening_Status_V3 {
                 'open_time' => self::clean_time($src['open_time'] ?? ''),
                 'close_time' => self::clean_time($src['close_time'] ?? ''),
                 'price' => sanitize_text_field($src['price'] ?? ''),
+                'overview_enabled' => !empty($src['overview_enabled']) ? 1 : 0,
+                'overview_heading' => sanitize_text_field($src['overview_heading'] ?? '会期情報'),
+                'date_label' => sanitize_text_field($src['date_label'] ?? '開苑期間'),
+                'date_display_mode' => in_array(($src['date_display_mode'] ?? 'auto'), ['auto','confirmed','usual','hidden'], true) ? $src['date_display_mode'] : 'auto',
+                'time_label' => sanitize_text_field($src['time_label'] ?? '開苑時間'),
+                'close_time_label' => sanitize_text_field($src['close_time_label'] ?? '入苑締切'),
+                'time_note' => sanitize_text_field($src['time_note'] ?? ''),
+                'admission_label' => sanitize_text_field($src['admission_label'] ?? '入苑料'),
+                'price_details' => sanitize_textarea_field($src['price_details'] ?? ''),
+                'price_note' => sanitize_textarea_field($src['price_note'] ?? ''),
+                'overview_note' => sanitize_textarea_field($src['overview_note'] ?? ''),
                 'detail_url' => esc_url_raw($src['detail_url'] ?? ''),
                 'publish_mode' => in_array(($src['publish_mode'] ?? ''), ['immediate','scheduled','manual'], true) ? $src['publish_mode'] : 'immediate',
                 'publish_at' => self::clean_datetime_local($src['publish_at'] ?? ''),
@@ -602,7 +1617,8 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function force_mobile_preview($is_mobile) {
-        if (!current_user_can('manage_options') || empty($_GET['garden_status_preview'])) return $is_mobile;
+        if (!current_user_can('manage_options')) return $is_mobile;
+        if (empty($_GET['garden_status_preview']) && empty($_GET['gos_event_info_preview'])) return $is_mobile;
         $device = sanitize_key($_GET['gos_preview_device'] ?? '');
         if ($device === 'mobile') return true;
         if ($device === 'desktop') return false;
@@ -610,12 +1626,69 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function body_class($classes) {
-        if (current_user_can('manage_options') && !empty($_GET['garden_status_preview'])) {
+        if (current_user_can('manage_options') && (!empty($_GET['garden_status_preview']) || !empty($_GET['gos_event_info_preview']))) {
             $device = sanitize_key($_GET['gos_preview_device'] ?? '');
             if ($device === 'mobile') $classes[] = 'gos-force-mobile';
             if ($device === 'desktop') $classes[] = 'gos-force-desktop';
+            if (!empty($_GET['gos_event_info_preview'])) $classes[] = 'gos-event-info-preview-page';
         }
         return $classes;
+    }
+
+    private static function event_page_preview_html() {
+        if (!current_user_can('manage_options') || empty($_GET['gos_event_info_preview'])) return '';
+        $token = sanitize_key($_GET['gos_preview_token'] ?? '');
+        $season = sanitize_key($_GET['gos_event_info_preview'] ?? '');
+        if (!$token || !in_array($season, self::event_keys(), true)) return '';
+        $preview = get_transient(self::preview_key($token));
+        if (!is_array($preview)) return '';
+        $o = self::normalize($preview);
+        if (empty($o['events'][$season]) || !is_array($o['events'][$season])) return '';
+        $notice = '<div class="gos-event-preview-notice" style="margin:0 0 18px;padding:10px 14px;border-left:4px solid #2271b1;background:#f0f6fc;font-size:14px"><strong>会期ページ実画面プレビュー</strong><br>管理画面で編集中の内容を表示しています。公開ページにはまだ反映されていません。</div>';
+        return '<div id="gos-event-info-live-preview" style="margin:0 0 28px">' . $notice . self::event_info_html($o['events'][$season], $season) . '</div>';
+    }
+
+    public static function event_page_preview_content($content) {
+        if (!is_singular()) return $content;
+        $preview_html = self::event_page_preview_html();
+        if ($preview_html === '') return $content;
+        return $preview_html . $content;
+    }
+
+    public static function event_page_preview_fallback() {
+        if (!is_singular()) return;
+        $preview_html = self::event_page_preview_html();
+        if ($preview_html === '') return;
+        $json = wp_json_encode($preview_html, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ?>
+        <script id="gos-event-info-preview-fallback">
+        (function(){
+            if(document.getElementById('gos-event-info-live-preview')) return;
+            var html=<?php echo $json; ?>;
+            var selectors=[
+                '.entry-content',
+                '.page-content',
+                'article .post-content',
+                'article .content',
+                'main article',
+                '#primary main',
+                '.site-main',
+                'main'
+            ];
+            var target=null;
+            for(var i=0;i<selectors.length;i++){
+                target=document.querySelector(selectors[i]);
+                if(target) break;
+            }
+            if(!target) return;
+            var holder=document.createElement('div');
+            holder.innerHTML=html;
+            var block=holder.firstElementChild;
+            if(!block) return;
+            target.insertBefore(block,target.firstChild);
+        })();
+        </script>
+        <?php
     }
 
     private static function now() {
@@ -763,12 +1836,27 @@ final class Garden_Opening_Status_V3 {
         return $time ? preg_replace('/^0/', '', $time) : '';
     }
 
+    private static function format_date_with_weekday($date) {
+        $date = trim((string)$date);
+        if ($date === '') return '';
+        try {
+            $dt = new DateTimeImmutable($date, wp_timezone());
+        } catch (Exception $e) {
+            return $date;
+        }
+        $weekdays = ['日','月','火','水','木','金','土'];
+        return $dt->format('Y年n月j日') . '（' . $weekdays[(int)$dt->format('w')] . '）';
+    }
+
     private static function format_date_range($start, $end) {
-        $s = self::dt($start); $e = self::dt($end);
-        if (!$s || !$e) return '';
-        return $s->format('Y') === $e->format('Y')
-            ? $s->format('Y年n月j日') . '～' . $e->format('n月j日')
-            : $s->format('Y年n月j日') . '～' . $e->format('Y年n月j日');
+        $start = trim((string)$start);
+        $end = trim((string)$end);
+        if ($start === '' && $end === '') return '';
+        if ($start !== '' && $end !== '') {
+            if ($start === $end) return self::format_date_with_weekday($start);
+            return self::format_date_with_weekday($start) . '～' . self::format_date_with_weekday($end);
+        }
+        return self::format_date_with_weekday($start !== '' ? $start : $end);
     }
 
     private static function title_html($title, $event) {
@@ -838,6 +1926,31 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function front_styles() {
+        echo '<style id="gos-event-page-info-style">
+        .gos-event-page-info{box-sizing:border-box;font-family:inherit;font-size:14px;font-weight:400;line-height:2;color:inherit}
+        .gos-event-page-info__rows{display:block}
+        .gos-event-page-info__row{display:grid;grid-template-columns:6.4em minmax(0,1fr);column-gap:0;margin:0 0 .55em;font:inherit;line-height:inherit}
+        .gos-event-page-info__label{display:block;white-space:nowrap;font:inherit;text-align:justify;text-align-last:justify;padding-right:.45em}
+        .gos-event-page-info__value{display:block;min-width:0;white-space:pre-line;font:inherit;line-height:inherit}
+        .gos-event-page-info__note{display:block;margin:0;font:inherit;line-height:inherit;white-space:pre-line}
+        .gos-event-page-info__footer-note{margin:.55em 0 0;font:inherit;line-height:inherit;white-space:pre-line}
+        .gos-event-page-info[lang="en"],.gos-event-page-info[lang="zh-Hant"]{line-height:1.8}
+        .gos-event-page-info[lang="en"] .gos-event-page-info__row{grid-template-columns:10.5em minmax(0,1fr);column-gap:.65em;margin:0 0 .45em}
+        .gos-event-page-info[lang="zh-Hant"] .gos-event-page-info__row{grid-template-columns:5.8em minmax(0,1fr);column-gap:.65em;margin:0 0 .45em}
+        .gos-event-page-info[lang="en"] .gos-event-page-info__label,.gos-event-page-info[lang="zh-Hant"] .gos-event-page-info__label{display:block;text-align:left;text-align-last:auto;padding:0;font-weight:400}
+        .gos-event-page-info[lang="en"] .gos-event-page-info__value,.gos-event-page-info[lang="zh-Hant"] .gos-event-page-info__value{display:block;white-space:normal}
+        .gos-event-page-info__line{display:block;margin:0 0 .2em}
+        @media(max-width:782px){
+            .gos-event-page-info{font-size:14px;line-height:1.85}
+            .gos-event-page-info__row{grid-template-columns:4.9em minmax(0,1fr);column-gap:.55em;row-gap:0;margin-bottom:.45em;align-items:start}
+            .gos-event-page-info[lang="en"] .gos-event-page-info__row{grid-template-columns:7.4em minmax(0,1fr)}
+            .gos-event-page-info[lang="zh-Hant"] .gos-event-page-info__row{grid-template-columns:4.9em minmax(0,1fr)}
+            .gos-event-page-info__label{font-weight:400!important;text-align:left;text-align-last:auto;padding:0;white-space:nowrap}
+            .gos-event-page-info__value{white-space:normal}
+            .gos-event-page-info__line{margin:0 0 .15em}
+        }
+        </style>';
+
         if (!self::should_render()) return;
         [$o, $model] = self::runtime_context();
         $event_key = in_array(($model['event_key'] ?? ''), self::event_keys(), true) ? $model['event_key'] : 'spring';
@@ -957,6 +2070,354 @@ final class Garden_Opening_Status_V3 {
         return '';
     }
 
+    private static function event_overview_date_text($event) {
+        $mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
+
+        if ($mode === 'hidden' || $mode === 'none') {
+            return '';
+        }
+
+        if ($mode === 'confirmed') {
+            $start = trim((string)($event['start'] ?? ''));
+            $end = trim((string)($event['end'] ?? ''));
+
+            if ($start !== '' && $end !== '') {
+                return self::format_date_range($start, $end);
+            }
+            if ($start !== '') return self::format_date_range($start, $start);
+            if ($end !== '') return self::format_date_range($end, $end);
+
+            return '';
+        }
+
+        return trim((string)($event['usual_period'] ?? ''));
+    }
+
+    private static function event_info_styles() {
+        static $printed = false;
+        if ($printed) return '';
+        $printed = true;
+        return '<style>.gos-event-info{margin:1.5em 0;padding:1.25em 1.4em;border:1px solid #d8d4cc;background:#fff;box-sizing:border-box}.gos-event-info__heading{margin:0 0 .9em;font-size:1.35em}.gos-event-info__row{display:grid;grid-template-columns:7em minmax(0,1fr);gap:.8em;padding:.55em 0;border-top:1px solid #ece9e3}.gos-event-info__row:first-of-type{border-top:0}.gos-event-info__label{font-weight:700}.gos-event-info__value p{margin:0 0 .35em}.gos-event-info__value p:last-child{margin-bottom:0}.gos-event-info__note{margin:.9em 0 0;color:#555}.gos-event-info__link{margin:1em 0 0}@media(max-width:600px){.gos-event-info{padding:1em}.gos-event-info__row{grid-template-columns:1fr;gap:.25em}}</style>';
+    }
+
+    public static function event_info_html($event, $season = '') {
+        $rows = [];
+        $date = self::event_overview_date_text($event);
+        if ($date !== '') $rows[] = [($event['date_label'] ?: '開苑期間'), esc_html($date)];
+
+        $open = self::format_time($event['open_time'] ?? '');
+        $close = self::format_time($event['close_time'] ?? '');
+        if ($open !== '' || $close !== '') {
+            $time = trim($open . (($open !== '' && $close !== '') ? '～' : '') . $close);
+            $close_label = trim((string)($event['close_time_label'] ?? ''));
+            if ($close_label !== '' && $close !== '') $time .= '（' . $close_label . '）';
+            $time_note = trim((string)($event['time_note'] ?? ''));
+            if ($time_note !== '') $time .= '<br><small>' . esc_html($time_note) . '</small>';
+            $rows[] = [($event['time_label'] ?: '開苑時間'), $time];
+        }
+
+        $details = trim((string)($event['price_details'] ?? ''));
+        if ($details === '') $details = trim((string)($event['price'] ?? ''));
+        if ($details !== '') {
+            $lines = preg_split('/\r\n|\r|\n/', $details);
+            $html = '';
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line !== '') $html .= '<p>' . esc_html($line) . '</p>';
+            }
+            $price_note = trim((string)($event['price_note'] ?? ''));
+            if ($price_note !== '') $html .= '<p><small>' . nl2br(esc_html($price_note)) . '</small></p>';
+            $rows[] = [($event['admission_label'] ?: '入苑料'), $html];
+        }
+
+        $heading = trim((string)($event['overview_heading'] ?? '会期情報'));
+        $html = self::event_info_styles();
+        $html .= '<section class="gos-event-info" data-season="' . esc_attr($season) . '">';
+        if ($heading !== '') $html .= '<h2 class="gos-event-info__heading">' . esc_html($heading) . '</h2>';
+        foreach ($rows as [$label, $value]) {
+            $html .= '<div class="gos-event-info__row"><div class="gos-event-info__label">' . esc_html($label) . '</div><div class="gos-event-info__value">' . $value . '</div></div>';
+        }
+        $note = trim((string)($event['overview_note'] ?? ''));
+        if ($note !== '') $html .= '<div class="gos-event-info__note">' . nl2br(esc_html($note)) . '</div>';
+        $html .= '</section>';
+        return $html;
+    }
+
+    private static function normalize_event_info_lang($lang) {
+        $lang = strtolower(str_replace('_', '-', trim((string)$lang)));
+        if (in_array($lang, ['en', 'en-us', 'en-gb'], true)) return 'en';
+        if (in_array($lang, ['zh', 'zh-tw', 'zh-hant', 'zh-hk'], true)) return 'zh-Hant';
+        return 'ja';
+    }
+
+    private static function localized_event_date_text($event, $lang) {
+        if ($lang === 'ja') return self::event_overview_date_text($event);
+
+        $mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
+        if ($mode === 'hidden' || $mode === 'none') return '';
+
+        if ($mode === 'confirmed') {
+            $start = trim((string)($event['start'] ?? ''));
+            $end = trim((string)($event['end'] ?? ''));
+            if ($start === '' && $end === '') return '';
+            $format = static function($value) use ($lang) {
+                $dt = date_create_immutable((string)$value, wp_timezone());
+                if (!$dt) return (string)$value;
+                if ($lang === 'en') return $dt->format('F j, Y');
+                return $dt->format('Y年n月j日');
+            };
+            if ($start !== '' && $end !== '') {
+                return $format($start) . ($lang === 'en' ? ' to ' : '至') . $format($end);
+            }
+            return $format($start !== '' ? $start : $end);
+        }
+
+        $usual = trim((string)($event['usual_period'] ?? ''));
+        if ($usual === '') return '';
+
+        if (!preg_match('/^(\d{1,2})月(?:(\d{1,2})日|(上旬|中旬|下旬))\s*[～〜~\-–—至]+\s*(\d{1,2})月(?:(\d{1,2})日|(上旬|中旬|下旬))$/u', $usual, $m)) {
+            return $usual;
+        }
+
+        $format_part = static function($month, $day, $period, $target_lang) {
+            $month = (int)$month;
+            if ($target_lang === 'zh-Hant') {
+                return $month . '月' . ($day !== '' ? ((int)$day . '日') : $period);
+            }
+
+            $months = [1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'];
+            if ($day !== '') return ($months[$month] ?? $month) . ' ' . (int)$day;
+            $parts = ['上旬' => 'early', '中旬' => 'mid', '下旬' => 'late'];
+            return ($parts[$period] ?? $period) . ' ' . ($months[$month] ?? $month);
+        };
+
+        $from = $format_part($m[1], (string)($m[2] ?? ''), (string)($m[3] ?? ''), $lang);
+        $to = $format_part($m[4], (string)($m[5] ?? ''), (string)($m[6] ?? ''), $lang);
+        return $from . ($lang === 'zh-Hant' ? '至' : ' to ') . $to;
+    }
+
+    private static function localize_event_info_text($text, $lang) {
+        $text = trim((string)$text);
+        if ($text === '' || $lang === 'ja') return $text;
+
+        if ($lang === 'en') {
+            $text = strtr($text, [
+                '大人（中学生以上）' => 'Adults (junior high school age and older)',
+                '大人(中学生以上)' => 'Adults (junior high school age and older)',
+                '団体（15名以上）' => 'Groups of 15 or more',
+                '団体(15名以上)' => 'Groups of 15 or more',
+                '小学生以下無料' => 'Free for elementary school students and younger',
+                '大人' => 'Adults',
+                '無料' => 'Free',
+                '割引はございません' => 'No discounts are available.',
+            ]);
+            return trim((string)preg_replace_callback('/([0-9][0-9,]*)円/u', static function($m) {
+                $number = number_format((int)str_replace(',', '', $m[1]));
+                return '¥' . $number;
+            }, $text));
+        }
+
+        $text = strtr($text, [
+            '大人（中学生以上）' => '成人（國中生以上）',
+            '大人(中学生以上)' => '成人（國中生以上）',
+            '団体（15名以上）' => '團體（15人以上）',
+            '団体(15名以上)' => '團體（15人以上）',
+            '小学生以下無料' => '小學生以下免費',
+            '大人' => '成人',
+            '無料' => '免費',
+            '割引はございません' => '不提供折扣。',
+        ]);
+        return trim((string)preg_replace_callback('/([0-9][0-9,]*)円/u', static function($m) {
+            $number = number_format((int)str_replace(',', '', $m[1]));
+            return $number . '日圓';
+        }, $text));
+    }
+
+    private static function localized_price_lines($text, $lang) {
+        $text = trim((string)$text);
+        if ($text === '') return [];
+        $raw_lines = preg_split('/\r\n|\r|\n/u', $text);
+        $lines = [];
+
+        foreach ($raw_lines as $raw) {
+            $line = trim((string)$raw);
+            if ($line === '') continue;
+            $plain = preg_replace('/^[※＊*\s]+/u', '', $line);
+
+            if ($lang === 'en') {
+                if (preg_match('/^大人\s*[（(]\s*中学生以上\s*[）)]\s*[:：]?\s*([0-9][0-9,]*)\s*円/u', $plain, $m)) {
+                    $lines[] = 'Adults (junior high school age and older): ¥' . number_format((int)str_replace(',', '', $m[1]));
+                    continue;
+                }
+                if (preg_match('/^団体\s*[（(]\s*(\d+)名以上\s*[）)]\s*[:：]?\s*([0-9][0-9,]*)\s*円/u', $plain, $m)) {
+                    $lines[] = 'Groups of ' . (int)$m[1] . ' or more: ¥' . number_format((int)str_replace(',', '', $m[2])) . ' per person';
+                    continue;
+                }
+                if (preg_match('/^小学生以下無料/u', $plain)) {
+                    $lines[] = 'Free for elementary school students and younger';
+                    continue;
+                }
+                if (preg_match('/割引はございません/u', $plain)) {
+                    $lines[] = 'No discounts are available.';
+                    continue;
+                }
+            } elseif ($lang === 'zh-Hant') {
+                if (preg_match('/^大人\s*[（(]\s*中学生以上\s*[）)]\s*[:：]?\s*([0-9][0-9,]*)\s*円/u', $plain, $m)) {
+                    $lines[] = '成人（國中生以上）：' . number_format((int)str_replace(',', '', $m[1])) . '日圓';
+                    continue;
+                }
+                if (preg_match('/^団体\s*[（(]\s*(\d+)名以上\s*[）)]\s*[:：]?\s*([0-9][0-9,]*)\s*円/u', $plain, $m)) {
+                    $lines[] = (int)$m[1] . '人以上團體：每人' . number_format((int)str_replace(',', '', $m[2])) . '日圓';
+                    continue;
+                }
+                if (preg_match('/^小学生以下無料/u', $plain)) {
+                    $lines[] = '小學生以下免費';
+                    continue;
+                }
+                if (preg_match('/割引はございません/u', $plain)) {
+                    $lines[] = '不提供折扣。';
+                    continue;
+                }
+            }
+
+            $lines[] = self::localize_event_info_text($line, $lang);
+        }
+        return $lines;
+    }
+
+    public static function expand_event_info_shortcodes($content) {
+        if (!is_string($content)) return $content;
+        if (
+            strpos($content, '[garden_event_info') === false &&
+            strpos($content, '[garden_instagram_gallery') === false
+        ) {
+            return $content;
+        }
+        return do_shortcode($content);
+    }
+
+    /**
+     * Legacy page templates can print page content without applying the_content.
+     * This narrowly replaces only a visible garden_event_info token on the two
+     * multilingual pages, without buffering or rewriting the whole response.
+     */
+    public static function multilingual_event_info_fallback() {
+        if (is_admin() || (!is_page('english') && !is_page('chinese'))) return;
+        $lang = is_page('chinese') ? 'zh-Hant' : 'en';
+        $rendered = [];
+        foreach (self::event_keys() as $season) {
+            $rendered[$season] = self::shortcode_event_info([
+                'season' => $season,
+                'lang' => $lang,
+            ]);
+        }
+        $json = wp_json_encode($rendered, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ?>
+        <script id="gos-multilingual-event-info-fallback">
+        (function(){
+            var rendered=<?php echo $json; ?>;
+            var pattern=/\[garden_event_info\s+[^\]]*(?:season|event)=["']?(spring|autumn|winter)["']?[^\]]*\]/i;
+            var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{
+                acceptNode:function(node){
+                    if(!node.nodeValue||node.nodeValue.indexOf('[garden_event_info')===-1)return NodeFilter.FILTER_REJECT;
+                    var p=node.parentElement;
+                    if(!p||/^(SCRIPT|STYLE|TEXTAREA|CODE|PRE)$/i.test(p.tagName))return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            var nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+            nodes.forEach(function(node){
+                var text=node.nodeValue,match=text.match(pattern);if(!match)return;
+                var season=String(match[1]||'').toLowerCase(),html=rendered[season]||'';
+                var before=text.slice(0,match.index),after=text.slice(match.index+match[0].length);
+                var frag=document.createDocumentFragment();
+                if(before)frag.appendChild(document.createTextNode(before));
+                var holder=document.createElement('div');holder.innerHTML=html;
+                while(holder.firstChild)frag.appendChild(holder.firstChild);
+                if(after)frag.appendChild(document.createTextNode(after));
+                node.parentNode.replaceChild(frag,node);
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    public static function shortcode_event_info($atts) {
+        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+        if (!defined('DONOTCACHEDB')) define('DONOTCACHEDB', true);
+        if (!defined('DONOTMINIFY')) define('DONOTMINIFY', true);
+
+        $atts = shortcode_atts([
+            'season' => '',
+            'event' => '',
+            'heading' => '1',
+            'lang' => 'ja',
+        ], $atts, 'garden_event_info');
+
+        $season = sanitize_key((string)($atts['season'] !== '' ? $atts['season'] : $atts['event']));
+        if (!in_array($season, self::event_keys(), true)) $season = 'spring';
+        $lang = self::normalize_event_info_lang($atts['lang']);
+
+        $o = self::options(false);
+        $event = is_array($o['events'][$season] ?? null) ? $o['events'][$season] : [];
+
+        $date_text = self::localized_event_date_text($event, $lang);
+        $open_text = self::format_time($event['open_time'] ?? '');
+        $close_text = self::format_time($event['close_time'] ?? '');
+        $separator = $lang === 'ja' ? '～' : '–';
+        $time_text = trim($open_text . (($open_text && $close_text) ? $separator : '') . $close_text);
+        $close_label = trim((string)($event['close_time_label'] ?? ''));
+        if ($time_text && $close_label) {
+            if ($lang === 'en') $time_text .= ' (last admission)';
+            elseif ($lang === 'zh-Hant') $time_text .= '（入園截止）';
+            else $time_text .= '（' . $close_label . '）';
+        }
+
+        $price_details = trim((string)($event['price_details'] ?? ''));
+        if ($price_details === '') $price_details = trim((string)($event['price'] ?? ''));
+        $price_lines = self::localized_price_lines($price_details, $lang);
+
+        $labels = [
+            'ja' => [
+                'date' => trim((string)($event['date_label'] ?? '')) ?: '開苑期間',
+                'time' => trim((string)($event['time_label'] ?? '')) ?: '開苑時間',
+                'price' => trim((string)($event['admission_label'] ?? '')) ?: '入苑料',
+            ],
+            'en' => ['date' => 'Opening period', 'time' => 'Opening hours', 'price' => 'Admission'],
+            'zh-Hant' => ['date' => '開放期間', 'time' => '開放時間', 'price' => '入園費'],
+        ];
+
+        $rows = [];
+        if ($date_text !== '') $rows[] = [$labels[$lang]['date'], $date_text, ''];
+        if ($time_text !== '') $rows[] = [$labels[$lang]['time'], $time_text, self::localize_event_info_text($event['time_note'] ?? '', $lang)];
+        if ($price_lines) $rows[] = [$labels[$lang]['price'], $price_lines, self::localize_event_info_text($event['price_note'] ?? '', $lang)];
+        if (!$rows) return '';
+
+        ob_start();
+        ?>
+        <section class="gos-event-page-info" data-gos-event-season="<?php echo esc_attr($season); ?>" lang="<?php echo esc_attr($lang); ?>">
+            <div class="gos-event-page-info__rows">
+                <?php foreach ($rows as [$label, $value, $note]): ?>
+                    <div class="gos-event-page-info__row">
+                        <span class="gos-event-page-info__label"><?php echo esc_html($label); ?><?php echo $lang === 'en' ? ':' : '：'; ?></span>
+                        <span class="gos-event-page-info__value">
+                            <?php if (is_array($value)): ?>
+                                <?php foreach ($value as $line): ?><span class="gos-event-page-info__line"><?php echo esc_html($line); ?></span><?php endforeach; ?>
+                            <?php else: ?>
+                                <?php echo nl2br(esc_html($value)); ?>
+                            <?php endif; ?>
+                            <?php if ($note !== ''): ?>
+                                <small class="gos-event-page-info__note"><?php echo nl2br(esc_html($note)); ?></small>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+        <?php
+        return (string)ob_get_clean();
+    }
+
     public static function mobile_preview_shell() {
         if (!current_user_can('manage_options')) wp_die('権限がありません。');
         $token = sanitize_key($_GET['token'] ?? '');
@@ -987,7 +2448,7 @@ final class Garden_Opening_Status_V3 {
         ], home_url('/'));
         ?>
         <div class="wrap gos3-admin" data-preview-token="<?php echo esc_attr($token); ?>" data-current-state="<?php echo esc_attr($current['state']); ?>" data-selected-layout="<?php echo esc_attr(sanitize_key($_GET['selected_layout'] ?? '')); ?>">
-            <h1>開催状況</h1>
+            <h1>開催情報管理</h1>
             <?php if (!empty($_GET['updated'])): ?>
                 <div class="notice notice-success is-dismissible"><p>設定を保存しました。</p></div>
             <?php endif; ?>
@@ -1013,7 +2474,7 @@ final class Garden_Opening_Status_V3 {
                                 <label class="wide"><input type="checkbox" name="enabled" value="1" <?php checked($o['enabled']); ?>> 新しい開催状況表示を有効にする</label>
                                 <label>公開状態の決め方<select name="state_mode" id="gos3-state-mode"><option value="manual" <?php selected($o['state_mode'],'manual'); ?>>手動で選ぶ</option><option value="auto" <?php selected($o['state_mode'],'auto'); ?>>日時から自動判定</option></select></label>
                                 <label>現在公開する状態<select name="manual_state" id="gos3-manual-state"><?php foreach ($labels as $key=>$label): ?><option value="<?php echo esc_attr($key); ?>" <?php selected($o['manual_state'],$key); ?>><?php echo esc_html($label); ?></option><?php endforeach; ?></select></label>
-                                <label>公開に使うイベント<select name="manual_event" id="gos3-manual-event"><?php foreach (self::event_keys() as $key): ?><option value="<?php echo esc_attr($key); ?>" <?php selected($o['manual_event'],$key); ?>><?php echo esc_html($o['events'][$key]['label']); ?></option><?php endforeach; ?></select></label>
+                                <label>開催概要<select name="manual_event" id="gos3-manual-event"><?php foreach (self::event_keys() as $key): ?><option value="<?php echo esc_attr($key); ?>" <?php selected($o['manual_event'],$key); ?>><?php echo esc_html($o['events'][$key]['label']); ?></option><?php endforeach; ?></select></label>
                                 <div class="wide gos3-state-note">日時からの自動判定：<strong><?php echo esc_html($automatic['state_label']); ?></strong>　現在の公開設定：<strong><?php echo esc_html($o['state_mode']==='manual' ? $labels[$o['manual_state']] : '自動判定'); ?></strong></div>
                                 <label>次回表示<select name="next_mode"><option value="auto" <?php selected($o['next_mode'],'auto'); ?>>自動</option><?php foreach (self::event_keys() as $key): ?><option value="<?php echo esc_attr($key); ?>" <?php selected($o['next_mode'],$key); ?>><?php echo esc_html($o['events'][$key]['label']); ?></option><?php endforeach; ?><option value="none" <?php selected($o['next_mode'],'none'); ?>>表示しない</option></select></label>
                                 <label>臨時閉苑日<input type="date" name="temporary_closed_date" value="<?php echo esc_attr($o['temporary_closed_date']); ?>"></label>
@@ -1025,7 +2486,7 @@ final class Garden_Opening_Status_V3 {
                         </section>
 
                         <section class="gos3-card">
-                            <h2>イベント</h2>
+                            <h2>イベント・会期概要</h2>
                             <div class="gos3-segment" id="gos3-event-tabs"><?php foreach (self::event_keys() as $i=>$key): ?><button type="button" data-event="<?php echo esc_attr($key); ?>" class="<?php echo $i===0?'active':''; ?>"><?php echo esc_html(['spring'=>'春','autumn'=>'秋','winter'=>'冬'][$key]); ?></button><?php endforeach; ?></div>
                             <?php foreach (self::event_keys() as $i=>$key): $e=$o['events'][$key]; ?>
                             <div class="gos3-event-panel <?php echo $i===0?'active':''; ?>" data-event-panel="<?php echo esc_attr($key); ?>">
@@ -1033,15 +2494,42 @@ final class Garden_Opening_Status_V3 {
                                     <label class="wide"><input type="checkbox" name="events[<?php echo esc_attr($key); ?>][enabled]" value="1" <?php checked($e['enabled']); ?>> このイベントを使用する</label>
                                     <label class="wide">催し名<input type="text" name="events[<?php echo esc_attr($key); ?>][label]" value="<?php echo esc_attr($e['label']); ?>"></label>
                                     <label class="wide">例年の開催時期<input type="text" name="events[<?php echo esc_attr($key); ?>][usual_period]" value="<?php echo esc_attr($e['usual_period']); ?>" placeholder="例：4月上旬～5月上旬"></label>
-                                    <label>確定開始日<input type="date" name="events[<?php echo esc_attr($key); ?>][start]" value="<?php echo esc_attr($e['start']); ?>"></label>
+
+                                <label>期間の表示
+                                    <select name="events[<?php echo esc_attr($key); ?>][date_display_mode]">
+                                        <option value="usual" <?php selected(($e['date_display_mode'] ?? 'usual'), 'usual'); ?>>例年時期を表示</option>
+                                        <option value="confirmed" <?php selected(($e['date_display_mode'] ?? 'usual'), 'confirmed'); ?>>確定日を表示</option>
+                                        <option value="hidden" <?php selected(($e['date_display_mode'] ?? 'usual'), 'hidden'); ?>>表示しない</option>
+                                    </select>
+                                </label>
+
+                                <label>確定開始日<input type="date" name="events[<?php echo esc_attr($key); ?>][start]" value="<?php echo esc_attr($e['start']); ?>"></label>
                                     <label>確定終了日<input type="date" name="events[<?php echo esc_attr($key); ?>][end]" value="<?php echo esc_attr($e['end']); ?>"></label>
                                     <label>開苑時刻<input type="time" name="events[<?php echo esc_attr($key); ?>][open_time]" value="<?php echo esc_attr($e['open_time']); ?>"></label>
                                     <label>終了時刻<input type="time" name="events[<?php echo esc_attr($key); ?>][close_time]" value="<?php echo esc_attr($e['close_time']); ?>"></label>
-                                    <label class="wide">料金<input type="text" name="events[<?php echo esc_attr($key); ?>][price]" value="<?php echo esc_attr($e['price']); ?>"></label>
+                                    <label class="wide">トップ表示用料金（短文）<input type="text" name="events[<?php echo esc_attr($key); ?>][price]" value="<?php echo esc_attr($e['price']); ?>" placeholder="例：大人1,000円"></label>
                                     <label class="wide">詳細ページURL<input type="url" name="events[<?php echo esc_attr($key); ?>][detail_url]" value="<?php echo esc_attr($e['detail_url']); ?>"></label>
+
+                                    <div class="wide gos3-event-overview-fields">
+                                        <h3>会期ページへ出す開催概要</h3>
+                                        <p class="description">保存すると、既存ページのレイアウトを維持したまま、公開画面の会期情報だけを更新します。</p>
+                                        <div class="gos3-fields">
+                                            <label class="wide">見出し<input type="text" name="events[<?php echo esc_attr($key); ?>][overview_heading]" value="<?php echo esc_attr($e['overview_heading']); ?>"></label>
+                                            <label>期間の項目名<input type="text" name="events[<?php echo esc_attr($key); ?>][date_label]" value="<?php echo esc_attr($e['date_label']); ?>"></label>
+
+                                            <label>時間の項目名<input type="text" name="events[<?php echo esc_attr($key); ?>][time_label]" value="<?php echo esc_attr($e['time_label']); ?>"></label>
+                                            <label>終了時刻の補足<input type="text" name="events[<?php echo esc_attr($key); ?>][close_time_label]" value="<?php echo esc_attr($e['close_time_label']); ?>" placeholder="例：入苑締切"></label>
+                                            <label class="wide">時間補足<input type="text" name="events[<?php echo esc_attr($key); ?>][time_note]" value="<?php echo esc_attr($e['time_note']); ?>"></label>
+                                            <label class="wide">料金の項目名<input type="text" name="events[<?php echo esc_attr($key); ?>][admission_label]" value="<?php echo esc_attr($e['admission_label']); ?>"></label>
+                                            <label class="wide">会期ページ用料金（1行ずつ）<textarea rows="4" name="events[<?php echo esc_attr($key); ?>][price_details]" placeholder="大人（中学生以上）1,000円&#10;団体（15名以上）800円&#10;小学生以下無料"><?php echo esc_textarea($e['price_details']); ?></textarea></label>
+                                            <label class="wide">料金補足<textarea rows="2" name="events[<?php echo esc_attr($key); ?>][price_note]" placeholder="例：割引はございません"><?php echo esc_textarea($e['price_note']); ?></textarea></label>
+                                            <label class="wide">開催概要の補足<textarea rows="3" name="events[<?php echo esc_attr($key); ?>][overview_note]"><?php echo esc_textarea($e['overview_note']); ?></textarea></label>
+                                        </div>
+                                        <div class="gos3-event-info-preview"><strong>保存済み内容の表示見本</strong><?php echo self::event_info_html($e, $key); ?></div>
+                                    </div>
                                     <label>情報公開<select name="events[<?php echo esc_attr($key); ?>][publish_mode]"><option value="immediate" <?php selected($e['publish_mode'],'immediate'); ?>>すぐ公開</option><option value="scheduled" <?php selected($e['publish_mode'],'scheduled'); ?>>指定日時に公開</option><option value="manual" <?php selected($e['publish_mode'],'manual'); ?>>手動公開</option></select></label>
                                     <label>公開日時<input type="datetime-local" name="events[<?php echo esc_attr($key); ?>][publish_at]" value="<?php echo esc_attr($e['publish_at']); ?>"></label>
-                                    <label><input type="checkbox" name="events[<?php echo esc_attr($key); ?>][manual_published]" value="1" <?php checked($e['manual_published']); ?>> 手動公開をON</label>
+                                    <label><input type="hidden" name="events[<?php echo esc_attr($key); ?>][manual_published]" value="0"><input type="checkbox" name="events[<?php echo esc_attr($key); ?>][manual_published]" value="1" <?php checked($e['manual_published']); ?>> 手動公開をON</label>
                                     <label>終了後の確定日表示日数<input type="number" min="0" max="365" name="events[<?php echo esc_attr($key); ?>][post_end_days]" value="<?php echo esc_attr($e['post_end_days']); ?>"></label>
                                 </div>
                             </div>
@@ -1152,8 +2640,26 @@ final class Garden_Opening_Status_V3 {
 
                     <aside class="gos3-preview-card">
                         <div class="gos3-preview-head"><h2>プレビュー</h2><div class="gos3-segment" id="gos3-preview-device"><button type="button" data-preview-device="desktop" class="active">PC</button><button type="button" data-preview-device="mobile">スマホ</button></div></div>
-                        <div class="gos3-preview-actions"><button type="button" class="button" id="gos3-open-pc">PC実画面</button><button type="button" class="button" id="gos3-open-mobile">スマホ実画面</button><button type="button" class="button" id="gos3-reload-preview">再読込</button></div>
-                        <div class="gos3-direct-editor" id="gos3-direct-editor">
+                        <div class="gos3-preview-targets" aria-label="プレビュー対象">
+                            <span class="gos3-preview-targets-label">表示対象</span>
+                            <div class="gos3-segment" id="gos3-preview-targets">
+                                <button type="button" data-preview-target="status" class="active">開催状況</button>
+                                <button type="button" data-preview-target="event_overview">会期ページ</button>
+                            </div>
+                        </div>
+                        <div class="gos3-preview-contexts">
+                            <div class="gos3-preview-context" data-preview-context="status">
+                                <small>トップページに重ねる開催状況表示</small>
+                            </div>
+                            <div class="gos3-preview-context" data-preview-context="event_overview" hidden>
+                                <div class="gos3-segment gos3-preview-season" id="gos3-preview-season"><button type="button" data-preview-season="spring" class="active">春</button><button type="button" data-preview-season="autumn">秋</button><button type="button" data-preview-season="winter">冬</button></div>
+                            </div>
+                        </div>
+                        <div class="gos3-preview-actions" data-preview-tools="status"><button type="button" class="button" id="gos3-open-pc">開催状況 PC実画面</button><button type="button" class="button" id="gos3-open-mobile">開催状況 スマホ実画面</button><button type="button" class="button" id="gos3-reload-preview">開催状況を再読込</button></div>
+                        <div class="gos3-preview-actions" data-preview-tools="event_overview" hidden><button type="button" class="button" id="gos3-open-event-pc">会期ページ PC実画面</button><button type="button" class="button" id="gos3-open-event-mobile">会期ページ スマホ実画面</button><button type="button" class="button" id="gos3-reload-event-overview">会期ページを再読込</button></div>
+                        <details class="gos3-direct-editor" id="gos3-direct-editor">
+                            <summary><strong>配置調整ツール</strong><small>要素の移動・整列・スナップ</small></summary>
+                            <div class="gos3-direct-editor-body">
                             <div class="gos3-direct-editor-label"><strong>プレビュー上で移動</strong><small>要素を選んでドラッグ。矢印キー1px、Shift＋矢印10px。</small></div>
                             <div class="gos3-direct-elements">
                                 <button type="button" class="button active" data-gos3-edit-element="eyebrow">上段</button>
@@ -1172,14 +2678,660 @@ final class Garden_Opening_Status_V3 {
                                 <label class="gos3-snap-toggle"><input type="checkbox" id="gos3-snap-center" checked> 中心線へスナップ</label>
                                 <small class="gos3-snap-help">Altを押しながらドラッグすると一時的にスナップ解除</small>
                             </div>
-                        </div>
+                            </div>
+                        </details>
                         <div class="gos3-preview-frame desktop" id="gos3-preview-frame"><iframe id="gos3-preview-iframe" name="gos3-preview-iframe-window" src="<?php echo esc_url($preview_src); ?>"></iframe></div>
+                        <div class="gos3-overview-preview desktop" id="gos3-overview-preview" hidden>
+                            <div class="gos3-overview-page"><div class="gos3-overview-page-title" id="gos3-overview-page-title"></div><div id="gos3-overview-preview-body"></div></div>
+                        </div>
                         <p id="gos3-preview-status">編集中の内容を実画面で表示します。</p>
                     </aside>
                 </div>
             </form>
         </div>
         <?php
+    }
+
+
+    private static function instagram_defaults() {
+        return [
+            'enabled' => 0,
+            'auto_home' => 1,
+            'access_token' => '',
+            'ig_user_id' => '',
+            'api_version' => 'v23.0',
+            'limit' => 6,
+            'profile_url' => 'https://www.instagram.com/utbotanen_official/',
+            'heading' => 'Instagram',
+            'last_fetch' => 0,
+            'last_error' => '',
+            'items' => [],
+        ];
+    }
+
+    private static function instagram_options() {
+        $saved = get_option('gos_instagram_gallery_options', []);
+        $saved = is_array($saved) ? $saved : [];
+        return array_replace(self::instagram_defaults(), $saved);
+    }
+
+    public static function instagram_cron_schedules($schedules) {
+        if (!isset($schedules['gos_six_hours'])) {
+            $schedules['gos_six_hours'] = ['interval' => 21600, 'display' => '6時間ごと'];
+        }
+        return $schedules;
+    }
+
+    public static function instagram_admin_menu() {
+        add_submenu_page(
+            'options-general.php',
+            'Instagramギャラリー',
+            'Instagramギャラリー',
+            'manage_options',
+            'gos-instagram-gallery',
+            [__CLASS__, 'instagram_admin_page']
+        );
+    }
+
+    public static function instagram_admin_page() {
+        if (!current_user_can('manage_options')) return;
+        $o = self::instagram_options();
+        $status = isset($_GET['gos_instagram_status']) ? sanitize_key((string)$_GET['gos_instagram_status']) : '';
+        ?>
+        <div class="wrap">
+            <h1>Instagramギャラリー</h1>
+            <?php if ($status === 'saved'): ?><div class="notice notice-success"><p>設定を保存しました。</p></div><?php endif; ?>
+            <?php if ($status === 'refreshed'): ?><div class="notice notice-success"><p>Instagram投稿を取得しました。</p></div><?php endif; ?>
+            <?php if ($status === 'error'): ?><div class="notice notice-error"><p>取得に失敗しました。前回の表示データは維持されています。</p></div><?php endif; ?>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="gos_instagram_save">
+                <?php wp_nonce_field('gos_instagram_save'); ?>
+                <table class="form-table" role="presentation">
+                    <tr><th>トップページ表示</th><td><label><input type="checkbox" name="auto_home" value="1" <?php checked(!empty($o['auto_home'])); ?>> 「お知らせ」の下へ自動表示する</label><p class="description">ショートコード表示には影響しません。</p></td></tr>
+                    <tr><th>アクセストークン</th><td><input type="password" name="access_token" class="regular-text" autocomplete="new-password" placeholder="変更するときだけ入力"><p class="description">保存済みトークンは画面に再表示しません。</p></td></tr>
+                    <tr><th>InstagramユーザーID</th><td><input type="text" name="ig_user_id" class="regular-text" value="<?php echo esc_attr($o['ig_user_id']); ?>"><p class="description">空欄の場合は graph.instagram.com の me/media を使用します。</p></td></tr>
+                    <tr><th>APIバージョン</th><td><input type="text" name="api_version" value="<?php echo esc_attr($o['api_version']); ?>" class="small-text"></td></tr>
+                    <tr><th>表示件数</th><td><input type="number" name="limit" min="1" max="12" value="<?php echo (int)$o['limit']; ?>"></td></tr>
+                    <tr><th>見出し</th><td><input type="text" name="heading" class="regular-text" value="<?php echo esc_attr($o['heading']); ?>"></td></tr>
+                    <tr><th>プロフィールURL</th><td><input type="url" name="profile_url" class="regular-text" value="<?php echo esc_attr($o['profile_url']); ?>"></td></tr>
+                </table>
+                <?php submit_button('設定を保存'); ?>
+            </form>
+            <hr>
+            <p><strong>最終取得：</strong><?php echo $o['last_fetch'] ? esc_html(wp_date('Y-m-d H:i:s', (int)$o['last_fetch'])) : '未取得'; ?></p>
+            <?php if ($o['last_error']): ?><p style="color:#b32d2e"><strong>最新エラー：</strong><?php echo esc_html($o['last_error']); ?></p><?php endif; ?>
+            <p><strong>保存件数：</strong><?php echo count((array)$o['items']); ?>件</p>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="gos_instagram_refresh">
+                <?php wp_nonce_field('gos_instagram_refresh'); ?>
+                <?php submit_button('今すぐ取得', 'secondary'); ?>
+            </form>
+            <h2>設置用ショートコード</h2>
+            <code>[garden_instagram_gallery]</code>
+        </div>
+        <?php
+    }
+
+    public static function instagram_save() {
+        if (!current_user_can('manage_options')) wp_die('権限がありません。');
+        check_admin_referer('gos_instagram_save');
+        $o = self::instagram_options();
+        $o['enabled'] = !empty($_POST['enabled']) ? 1 : 0;
+        $o['auto_home'] = !empty($_POST['auto_home']) ? 1 : 0;
+        $token = isset($_POST['access_token']) ? trim((string)wp_unslash($_POST['access_token'])) : '';
+        if ($token !== '') $o['access_token'] = sanitize_text_field($token);
+        $o['ig_user_id'] = sanitize_text_field((string)($_POST['ig_user_id'] ?? ''));
+        $version = sanitize_text_field((string)($_POST['api_version'] ?? 'v23.0'));
+        $o['api_version'] = preg_match('/^v?\d+\.\d+$/', $version) ? (str_starts_with($version, 'v') ? $version : 'v'.$version) : 'v23.0';
+        $o['limit'] = max(1, min(12, absint($_POST['limit'] ?? 6)));
+        $o['heading'] = sanitize_text_field((string)($_POST['heading'] ?? 'Instagram'));
+        $o['profile_url'] = esc_url_raw((string)($_POST['profile_url'] ?? ''));
+        update_option('gos_instagram_gallery_options', $o, false);
+        if (!wp_next_scheduled('gos_instagram_cron')) wp_schedule_event(time()+300, 'gos_six_hours', 'gos_instagram_cron');
+        wp_safe_redirect(add_query_arg(['page'=>'gos-instagram-gallery','gos_instagram_status'=>'saved'], admin_url('options-general.php')));
+        exit;
+    }
+
+    public static function instagram_refresh_action() {
+        if (!current_user_can('manage_options')) wp_die('権限がありません。');
+        check_admin_referer('gos_instagram_refresh');
+        $ok = self::instagram_refresh();
+        wp_safe_redirect(add_query_arg(['page'=>'gos-instagram-gallery','gos_instagram_status'=>$ok?'refreshed':'error'], admin_url('options-general.php')));
+        exit;
+    }
+
+    public static function instagram_refresh() {
+        $o = self::instagram_options();
+        if (empty($o['access_token'])) {
+            $o['last_error'] = 'アクセストークンが未設定です。';
+            update_option('gos_instagram_gallery_options', $o, false);
+            return false;
+        }
+        $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
+        if ($o['ig_user_id'] !== '') {
+            $url = 'https://graph.facebook.com/' . rawurlencode($o['api_version']) . '/' . rawurlencode($o['ig_user_id']) . '/media';
+        } else {
+            $url = 'https://graph.instagram.com/' . rawurlencode($o['api_version']) . '/me/media';
+        }
+        $url = add_query_arg(['fields'=>$fields,'limit'=>max(12,(int)$o['limit'])], $url);
+        $response = wp_remote_get($url, [
+            'timeout' => 20,
+            'headers' => ['Authorization' => 'Bearer ' . $o['access_token']],
+        ]);
+        if (is_wp_error($response)) {
+            $o['last_error'] = $response->get_error_message();
+            update_option('gos_instagram_gallery_options', $o, false);
+            return false;
+        }
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code < 200 || $code >= 300 || !is_array($body) || !isset($body['data'])) {
+            $msg = is_array($body) && !empty($body['error']['message']) ? $body['error']['message'] : 'HTTP ' . $code;
+            $o['last_error'] = sanitize_text_field($msg);
+            update_option('gos_instagram_gallery_options', $o, false);
+            return false;
+        }
+        $items = [];
+        foreach ((array)$body['data'] as $item) {
+            if (!is_array($item) || empty($item['permalink'])) continue;
+            $image = ($item['media_type'] ?? '') === 'VIDEO' ? ($item['thumbnail_url'] ?? '') : ($item['media_url'] ?? '');
+            if ($image === '') continue;
+            $items[] = [
+                'id' => sanitize_text_field((string)($item['id'] ?? '')),
+                'caption' => sanitize_textarea_field((string)($item['caption'] ?? '')),
+                'media_type' => sanitize_key((string)($item['media_type'] ?? 'IMAGE')),
+                'image_url' => esc_url_raw($image),
+                'permalink' => esc_url_raw((string)$item['permalink']),
+                'timestamp' => sanitize_text_field((string)($item['timestamp'] ?? '')),
+            ];
+            if (count($items) >= 12) break;
+        }
+        if (!$items) {
+            $o['last_error'] = '表示できる投稿がありませんでした。';
+            update_option('gos_instagram_gallery_options', $o, false);
+            return false;
+        }
+        $o['items'] = $items;
+        $o['last_fetch'] = time();
+        $o['last_error'] = '';
+        update_option('gos_instagram_gallery_options', $o, false);
+        return true;
+    }
+
+
+    /**
+     * Some legacy page templates output page content without applying the_content,
+     * leaving the gallery shortcode visible as plain text. Replace only that token
+     * after the page has rendered, without buffering or rewriting the full response.
+     */
+    /**
+     * Japanese, English and Traditional Chinese access sections: use a two-column
+     * information/map layout on desktop. Mobile remains vertically stacked.
+     */
+    public static function japanese_access_layout() {
+        if (is_admin() || !is_page(['access', 'english', 'chinese'])) return;
+        ?>
+        <style id="gos-japanese-access-layout-style">
+        .gos-access-layout{
+            box-sizing:border-box;
+            margin:1.5em 0 0;
+        }
+        .gos-access-layout__info,
+        .gos-access-layout__map{
+            box-sizing:border-box;
+            min-width:0;
+        }
+        .gos-access-layout__map iframe{
+            display:block;
+            width:100%!important;
+            max-width:none!important;
+            height:420px!important;
+            border:0;
+        }
+        .gos-access-layout__map-link{
+            margin:.7em 0 0;
+            text-align:center;
+        }
+        @media(min-width:783px){
+            .gos-access-layout{
+                display:grid;
+                grid-template-columns:minmax(260px,36%) minmax(0,64%);
+                gap:34px;
+                align-items:start;
+            }
+            body.gos-access-multilingual .gos-access-layout{
+                max-width:none;
+                grid-template-columns:minmax(340px,40%) minmax(0,60%);
+                gap:48px;
+            }
+            body.gos-access-multilingual .gos-access-layout__info{
+                min-width:0;
+                overflow-wrap:anywhere;
+            }
+            .gos-access-layout__info > :first-child,
+            .gos-access-layout__map > :first-child{
+                margin-top:0!important;
+            }
+        }
+        @media(max-width:782px){
+            .gos-access-layout{
+                display:block;
+                margin-top:1em;
+            }
+            .gos-access-layout__map{
+                margin-top:1.6em;
+            }
+            .gos-access-layout__map iframe{
+                height:auto!important;
+                min-height:280px;
+            }
+        }
+        </style>
+        <script id="gos-japanese-access-layout-script">
+        (function(){
+            function cleanText(el){
+                return String((el&&el.textContent)||'').replace(/\s+/g,'').trim();
+            }
+            function follows(a,b){
+                return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+            }
+            function directChildWithin(node,ancestor){
+                var current=node;
+                while(current && current.parentElement!==ancestor){
+                    current=current.parentElement;
+                }
+                return current;
+            }
+            function commonAncestor(a,b){
+                var current=a;
+                while(current && current!==document.body){
+                    if(current.contains(b)) return current;
+                    current=current.parentElement;
+                }
+                return null;
+            }
+
+            var path=location.pathname.replace(/\/+$/,'');
+            var headings;
+            if(path.endsWith('/english')){
+                document.body.classList.add('gos-access-multilingual');
+                headings=['ContactInformation'];
+            }else if(path.endsWith('/chinese')){
+                document.body.classList.add('gos-access-multilingual');
+                headings=['交通與聯絡資訊','交通与联络资讯'];
+            }else{
+                headings=['交通・アクセス'];
+            }
+
+            var heading=null;
+            Array.prototype.some.call(
+                document.querySelectorAll('h1,h2,h3,h4,h5,p,strong,div'),
+                function(el){
+                    if(headings.indexOf(cleanText(el))!==-1){
+                        heading=el;
+                        return true;
+                    }
+                    return false;
+                }
+            );
+            if(!heading)return;
+
+            /*
+             * The old multilingual pages do not share the Japanese page's
+             * wrapper structure. Select the first map-like iframe appearing
+             * after the access heading, while excluding Facebook/calendar embeds.
+             */
+            var mapIframe=null;
+            Array.prototype.some.call(document.querySelectorAll('iframe'),function(frame){
+                if(!follows(heading,frame)) return false;
+                var src=String(frame.getAttribute('src')||'').toLowerCase();
+                if(src.indexOf('facebook.com')!==-1 || src.indexOf('calendar.google')!==-1){
+                    return false;
+                }
+                if(
+                    src.indexOf('google.com/maps')!==-1 ||
+                    src.indexOf('maps.google')!==-1 ||
+                    src.indexOf('google.co.jp/maps')!==-1 ||
+                    frame.width || frame.height
+                ){
+                    mapIframe=frame;
+                    return true;
+                }
+                return false;
+            });
+            if(!mapIframe)return;
+
+            var contentRoot=commonAncestor(heading,mapIframe);
+            if(!contentRoot || contentRoot===document.body)return;
+
+            /*
+             * On the multilingual pages both elements can initially resolve to
+             * the same broad wrapper. Descend through that shared wrapper until
+             * the heading area and map area become separate sibling blocks.
+             */
+            var headingBlock=null;
+            var mapBlock=null;
+            while(contentRoot && contentRoot!==document.body){
+                headingBlock=directChildWithin(heading,contentRoot);
+                mapBlock=directChildWithin(mapIframe,contentRoot);
+
+                if(!headingBlock || !mapBlock)return;
+                if(headingBlock!==mapBlock)break;
+
+                contentRoot=headingBlock;
+            }
+
+            if(
+                !contentRoot ||
+                contentRoot===document.body ||
+                !headingBlock ||
+                !mapBlock ||
+                headingBlock===mapBlock
+            )return;
+
+            if(contentRoot.querySelector(':scope > .gos-access-layout'))return;
+
+            var nodes=[];
+            var current=headingBlock.nextSibling;
+            while(current && current!==mapBlock){
+                var next=current.nextSibling;
+                nodes.push(current);
+                current=next;
+            }
+            if(current!==mapBlock)return;
+
+            var layout=document.createElement('div');
+            layout.className='gos-access-layout';
+            var info=document.createElement('div');
+            info.className='gos-access-layout__info';
+            var map=document.createElement('div');
+            map.className='gos-access-layout__map';
+
+            contentRoot.insertBefore(layout,headingBlock.nextSibling);
+            layout.appendChild(info);
+            layout.appendChild(map);
+
+            nodes.forEach(function(node){
+                info.appendChild(node);
+            });
+            map.appendChild(mapBlock);
+
+            if(document.body.classList.contains('gos-access-multilingual')){
+                var positionLayout=function(){
+                    if(window.innerWidth<783){
+                        layout.style.width='';
+                        layout.style.marginLeft='';
+                        return;
+                    }
+
+                    layout.style.width='';
+                    layout.style.marginLeft='';
+
+                    var desiredWidth=Math.min(1120,Math.max(760,window.innerWidth-96));
+                    layout.style.width=desiredWidth+'px';
+
+                    var rect=layout.getBoundingClientRect();
+                    var targetLeft=Math.max(48,(window.innerWidth-desiredWidth)/2);
+                    var shift=targetLeft-rect.left;
+
+                    layout.style.marginLeft=shift+'px';
+                };
+
+                positionLayout();
+                window.addEventListener('resize',positionLayout,{passive:true});
+            }
+
+            /*
+             * Move the "larger map" link into the map column when it is the
+             * next nearby element. Facebook remains outside the layout.
+             */
+            var after=layout.nextSibling;
+            while(after && after.nodeType===3 && !after.nodeValue.trim()){
+                var blank=after;
+                after=after.nextSibling;
+                blank.parentNode.removeChild(blank);
+            }
+            if(after && after.nodeType===1){
+                var link=after.matches('a') ? after : after.querySelector('a');
+                var label=cleanText(link);
+                if(
+                    link &&
+                    (
+                        /大きな地図で見る/.test(label) ||
+                        /ViewLargerMap/i.test(label) ||
+                        /在較大的地圖上查看|在较大的地图上查看|在更大的地圖上查看|在更大的地图上查看/.test(label)
+                    )
+                ){
+                    after.classList.add('gos-access-layout__map-link');
+                    map.appendChild(after);
+                }
+            }
+
+            /*
+             * On the Chinese page the larger-map button is not adjacent to the
+             * iframe; it remains inside the information column. Find that
+             * existing button and move its containing block below the map.
+             */
+            if(path.endsWith('/chinese')){
+                var chineseMapButton=null;
+                Array.prototype.some.call(contentRoot.querySelectorAll('a'),function(a){
+                    var label=cleanText(a);
+                    if(
+                        /在較大的地圖上查看|在较大的地图上查看|在更大的地圖上查看|在更大的地图上查看/.test(label)
+                    ){
+                        chineseMapButton=a;
+                        return true;
+                    }
+                    return false;
+                });
+
+                if(chineseMapButton){
+                    var buttonBlock=chineseMapButton;
+                    while(
+                        buttonBlock.parentElement &&
+                        buttonBlock.parentElement!==contentRoot &&
+                        buttonBlock.parentElement!==info &&
+                        buttonBlock.parentElement!==map
+                    ){
+                        buttonBlock=buttonBlock.parentElement;
+                    }
+
+                    if(buttonBlock!==map && !map.contains(buttonBlock)){
+                        buttonBlock.classList.add('gos-access-layout__map-link');
+                        map.appendChild(buttonBlock);
+                    }
+                }
+            }
+        })();
+        </script>
+        <?php
+    }
+
+    public static function instagram_gallery_fallback() {
+        if (is_admin()) return;
+
+        $o = self::instagram_options();
+        $html = self::shortcode_instagram_gallery(is_front_page() && !empty($o['auto_home']) ? ['limit' => 12] : []);
+
+        $auto_multilingual = is_page(['english', 'chinese']);
+        $multilingual_label = is_page('chinese') ? '在 Instagram 查看更多' : 'View more on Instagram';
+        $multilingual_html = $auto_multilingual
+            ? self::shortcode_instagram_gallery([
+                'limit' => 12,
+                'heading' => 'Instagram',
+                'variant' => 'multilingual',
+                'more_label' => $multilingual_label,
+            ])
+            : '';
+
+        if ($html === '' && $multilingual_html === '') return;
+
+        $json = wp_json_encode($html, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $multilingual_json = wp_json_encode($multilingual_html, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $auto_home = is_front_page() && !empty($o['auto_home']);
+        ?>
+        <script id="gos-instagram-gallery-fallback">
+        (function(){
+            var html=<?php echo $json; ?>;
+            var multilingualHtml=<?php echo $multilingual_json; ?>;
+            var autoHome=<?php echo $auto_home ? 'true' : 'false'; ?>;
+            var autoMultilingual=<?php echo $auto_multilingual ? 'true' : 'false'; ?>;
+            var pattern=/\[garden_instagram_gallery(?:\s+[^\]]*)?\]/i;
+
+            function makeFragment(markup){
+                var holder=document.createElement('div');
+                holder.innerHTML=markup;
+                var frag=document.createDocumentFragment();
+                while(holder.firstChild)frag.appendChild(holder.firstChild);
+                return frag;
+            }
+
+            // Expand visible shortcode text in legacy templates.
+            var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{
+                acceptNode:function(node){
+                    if(!node.nodeValue||node.nodeValue.indexOf('[garden_instagram_gallery')===-1){
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    var p=node.parentElement;
+                    if(!p||/^(SCRIPT|STYLE|TEXTAREA|CODE|PRE)$/i.test(p.tagName)){
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            var nodes=[];
+            while(walker.nextNode())nodes.push(walker.currentNode);
+            nodes.forEach(function(node){
+                var text=node.nodeValue;
+                var match=text.match(pattern);
+                if(!match)return;
+                var before=text.slice(0,match.index);
+                var after=text.slice(match.index+match[0].length);
+                var frag=document.createDocumentFragment();
+                if(before)frag.appendChild(document.createTextNode(before));
+                frag.appendChild(makeFragment(html));
+                if(after)frag.appendChild(document.createTextNode(after));
+                node.parentNode.replaceChild(frag,node);
+            });
+
+            if(
+                autoMultilingual &&
+                multilingualHtml &&
+                !document.querySelector('.gos-instagram-gallery--multilingual')
+            ){
+                var accessLayout=document.querySelector('.gos-access-layout');
+                if(accessLayout && accessLayout.parentNode){
+                    var multilingualFragment=makeFragment(multilingualHtml);
+                    accessLayout.parentNode.insertBefore(
+                        multilingualFragment,
+                        accessLayout.nextSibling
+                    );
+
+                    var multilingualGallery=document.querySelector('.gos-instagram-gallery--multilingual');
+                    if(multilingualGallery){
+                        var positionMultilingualGallery=function(){
+                            if(window.innerWidth<601){
+                                multilingualGallery.style.width='';
+                                multilingualGallery.style.marginLeft='';
+                                return;
+                            }
+
+                            multilingualGallery.style.width='900px';
+                            multilingualGallery.style.maxWidth='calc(100vw - 64px)';
+                            multilingualGallery.style.marginLeft='';
+
+                            var rect=multilingualGallery.getBoundingClientRect();
+                            var desiredWidth=Math.min(900,window.innerWidth-64);
+                            var targetLeft=(window.innerWidth-desiredWidth)/2;
+                            multilingualGallery.style.width=desiredWidth+'px';
+                            multilingualGallery.style.marginLeft=(targetLeft-rect.left)+'px';
+                        };
+
+                        positionMultilingualGallery();
+                        window.addEventListener('resize',positionMultilingualGallery,{passive:true});
+                    }
+                }
+            }
+
+            if(!autoHome||document.querySelector('.gos-instagram-gallery'))return;
+
+            function normalizedText(el){
+                return String((el&&el.textContent)||'').replace(/\s+/g,'').trim();
+            }
+
+            var moreLink=null;
+            Array.prototype.some.call(document.querySelectorAll('a'),function(a){
+                var label=normalizedText(a);
+                var href=String(a.getAttribute('href')||'');
+                if(label==='もっと見る' && (/news|information|お知らせ/i.test(href) || href)){
+                    moreLink=a;
+                    return true;
+                }
+                return false;
+            });
+
+            var newsBlock=null;
+            if(moreLink){
+                var node=moreLink;
+                for(var i=0;i<8 && node && node!==document.body;i++,node=node.parentElement){
+                    var heading=node.querySelector && node.querySelector('h1,h2,h3,h4');
+                    if(heading && normalizedText(heading)==='お知らせ'){
+                        newsBlock=node;
+                        break;
+                    }
+                }
+                if(!newsBlock){
+                    newsBlock=moreLink.closest('section,article,.index_news,.news,.news_list,.content_inner') || moreLink.parentElement;
+                }
+            }
+
+            if(!newsBlock){
+                Array.prototype.some.call(document.querySelectorAll('h1,h2,h3,h4'),function(h){
+                    if(normalizedText(h)!=='お知らせ')return false;
+                    newsBlock=h.closest('section,article,.index_news,.news,.news_list,.content_inner') || h.parentElement;
+                    return true;
+                });
+            }
+
+            if(!newsBlock || !newsBlock.parentNode)return;
+            newsBlock.parentNode.insertBefore(makeFragment(html),newsBlock.nextSibling);
+        })();
+        </script>
+        <?php
+    }
+
+    public static function shortcode_instagram_gallery($atts) {
+        $o = self::instagram_options();
+        // Placing the shortcode is itself an explicit instruction to display.
+        // Do not suppress it with the separate admin enable flag.
+        $atts = shortcode_atts([
+            'limit' => $o['limit'],
+            'heading' => $o['heading'],
+            'variant' => '',
+            'more_label' => 'Instagramでもっと見る',
+        ], $atts, 'garden_instagram_gallery');
+        $limit = max(1, min(12, absint($atts['limit'])));
+        $variant = sanitize_html_class((string)$atts['variant']);
+        $section_class = 'gos-instagram-gallery' . ($variant !== '' ? ' gos-instagram-gallery--' . $variant : '');
+        $items = array_slice((array)$o['items'], 0, $limit);
+        if (!$items) return current_user_can('manage_options') ? '<p>Instagramギャラリー：投稿未取得</p>' : '';
+        ob_start(); ?>
+        <section class="<?php echo esc_attr($section_class); ?>" aria-label="Instagram">
+            <?php if ((string)$atts['heading'] !== ''): ?><h2 class="gos-instagram-gallery__heading"><?php echo esc_html($atts['heading']); ?></h2><?php endif; ?>
+            <div class="gos-instagram-gallery__grid">
+                <?php foreach ($items as $item): ?>
+                    <a class="gos-instagram-gallery__item" href="<?php echo esc_url($item['permalink']); ?>" target="_blank" rel="noopener noreferrer">
+                        <img src="<?php echo esc_url($item['image_url']); ?>" alt="<?php echo esc_attr(wp_trim_words((string)$item['caption'], 12, '')); ?>" loading="lazy" decoding="async">
+                        <?php if (($item['media_type'] ?? '') === 'VIDEO'): ?><span class="gos-instagram-gallery__video" aria-hidden="true">▶</span><?php endif; ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+            <?php if ($o['profile_url']): ?><p class="gos-instagram-gallery__more"><a href="<?php echo esc_url($o['profile_url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html((string)$atts['more_label']); ?></a></p><?php endif; ?>
+        </section>
+        <style>
+        .gos-instagram-gallery{margin:46px auto 54px;max-width:900px;width:calc(100% - 32px);padding:0;box-sizing:border-box}.gos-instagram-gallery--multilingual{margin-top:46px}.gos-instagram-gallery--multilingual .gos-instagram-gallery__heading{text-align:center}.gos-instagram-gallery--multilingual .gos-instagram-gallery__more{text-align:center}.gos-instagram-gallery__heading{text-align:center;margin:0 0 22px;font-size:24px;font-weight:400;line-height:1.5;color:inherit}.gos-instagram-gallery__grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.gos-instagram-gallery__item{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:#eee}.gos-instagram-gallery__item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s ease}.gos-instagram-gallery__item:hover img{transform:scale(1.03)}.gos-instagram-gallery__video{position:absolute;right:8px;top:6px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);font-size:16px}.gos-instagram-gallery__more{text-align:center;margin:22px 0 0}.gos-instagram-gallery__more a{display:inline-block;min-width:180px;padding:11px 28px;background:#b20b38;color:#fff!important;text-decoration:none!important;font-size:15px;line-height:1.4;box-sizing:border-box}.gos-instagram-gallery__more a:hover{opacity:.86}@media(max-width:600px){.gos-instagram-gallery{max-width:250px;width:calc(100% - 48px);margin:34px auto 42px}.gos-instagram-gallery--multilingual{margin-top:34px}.gos-instagram-gallery__heading{font-size:20px;margin-bottom:18px}.gos-instagram-gallery__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.gos-instagram-gallery__item:nth-child(n+7){display:none}.gos-instagram-gallery__more{margin-top:18px}.gos-instagram-gallery__more a{min-width:174px;padding:11px 20px;font-size:15px}}
+        </style>
+        <?php return ob_get_clean();
     }
 
     private static function design_number($key,$label,$min,$max,$step=1) {

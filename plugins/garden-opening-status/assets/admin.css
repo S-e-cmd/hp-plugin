@@ -1,4 +1,4 @@
-.gos3-admin{max-width:1600px}.gos3-current{display:flex;gap:12px;align-items:center;background:#fff;border-left:4px solid #2271b1;padding:12px 16px;margin:14px 0}.gos3-current span{font-size:18px;font-weight:700}.gos3-current small{color:#666}.gos3-grid{display:grid;grid-template-columns:minmax(620px,1fr) minmax(420px,620px);gap:18px;align-items:start}.gos3-card,.gos3-preview-card{background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:18px;margin-bottom:18px}.gos3-card h2,.gos3-preview-card h2{margin:0 0 16px}.gos3-fields,.gos3-design-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.gos3-fields label,.gos3-design-fields>label{display:flex;flex-direction:column;gap:6px;font-weight:600}.gos3-fields label.wide{grid-column:1/-1}.gos3-fields input[type=text],.gos3-fields input[type=url],.gos3-fields input[type=date],.gos3-fields input[type=time],.gos3-fields input[type=datetime-local],.gos3-fields input[type=number],.gos3-fields select,.gos3-fields textarea,.gos3-design-fields input,.gos3-design-fields select{width:100%}.gos3-fields label:has(input[type=checkbox]){flex-direction:row;align-items:center;font-weight:400}.gos3-segment{display:inline-flex;border:1px solid #8c8f94;border-radius:5px;overflow:hidden;margin-bottom:14px}.gos3-segment button{border:0;border-right:1px solid #8c8f94;background:#f6f7f7;padding:7px 14px;cursor:pointer}.gos3-segment button:last-child{border-right:0}.gos3-segment button.active{background:#2271b1;color:#fff}.gos3-event-panel,.gos3-text-panel{display:none}.gos3-event-panel.active,.gos3-text-panel.active{display:block}.gos3-state-note{display:inline-block;margin-left:12px;color:#666}.gos3-design-groups details{border-top:1px solid #ddd;padding:10px 0}.gos3-design-groups summary{font-weight:700;cursor:pointer;margin-bottom:12px}.gos3-element-row{grid-column:1/-1;border:1px solid #ddd;padding:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.gos3-element-row legend{font-weight:700;padding:0 6px}.gos3-preview-card{position:sticky;top:46px}.gos3-preview-head{display:flex;justify-content:space-between;align-items:center}.gos3-preview-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.gos3-preview-frame{margin:auto;background:#ddd;border:1px solid #aaa;overflow:hidden;transition:width .2s,height .2s}.gos3-preview-frame.desktop{width:100%;height:650px}.gos3-preview-frame.mobile{width:390px;max-width:100%;height:720px;border:8px solid #222;border-radius:24px}.gos3-preview-frame iframe{width:100%;height:100%;border:0;background:#fff}.gos3-preview-card p{color:#666;margin-bottom:0}@media(max-width:1180px){.gos3-grid{grid-template-columns:1fr}.gos3-preview-card{position:static}}@media(max-width:782px){.gos3-fields,.gos3-design-fields{grid-template-columns:1fr}.gos3-element-row{grid-template-columns:1fr}.gos3-preview-frame.desktop{height:500px}}
+.gos3-admin{max-width:1600px}.gos3-current{display:flex;gap:12px;align-items:center;background:#fff;border-left:4px solid #2271b1;padding:12px 16px;margin:14px 0}.gos3-current span{font-size:18px;font-weight:700}.gos3-current small{color:#666}.gos3-grid{display:grid;grid-template-columns:minmax(620px,1fr) minmax(420px,620px);gap:18px;align-items:start}.gos3-card,.gos3-preview-card{background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:18px;margin-bottom:18px}.gos3-card h2,.gos3-preview-card h2{margin:0 0 16px}.gos3-fields,.gos3-design-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.gos3-fields label,.gos3-design-fields>label{display:flex;flex-direction:column;gap:6px;font-weight:600}.gos3-fields label.wide{grid-column:1/-1}.gos3-fields input[type=text],.gos3-fields input[type=url],.gos3-fields input[type=date],.gos3-fields input[type=time],.gos3-fields input[type=datetime-local],.gos3-fields input[type=number],.gos3-fields select,.gos3-fields textarea,.gos3-design-fields input,.gos3-design-fields select{width:100%}.gos3-fields label:has(input[type=checkbox]){flex-direction:row;align-items:center;font-weight:400}.gos3-segment{display:inline-flex;border:1px solid #8c8f94;border-radius:5px;overflow:hidden;margin-bottom:14px}.gos3-segment button{border:0;border-right:1px solid #8c8f94;background:#f6f7f7;padding:7px 14px;cursor:pointer}.gos3-segment button:last-child{border-right:0}.gos3-segment button.active{background:#2271b1;color:#fff}.gos3-event-panel,.gos3-text-panel{display:none}.gos3-event-panel.active,.gos3-text-panel.active{display:block}.gos3-state-note{display:inline-block;margin-left:12px;color:#666}.gos3-design-groups details{border-top:1px solid #ddd;padding:10px 0}.gos3-design-groups summary{font-weight:700;cursor:pointer;margin-bottom:12px}.gos3-element-row{grid-column:1/-1;border:1px solid #ddd;padding:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.gos3-element-row legend{font-weight:700;padding:0 6px}.gos3-preview-card{position:sticky;top:46px;box-sizing:border-box;max-height:calc(100vh - 58px);overflow:auto}.gos3-preview-head{display:flex;justify-content:space-between;align-items:center}.gos3-preview-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.gos3-preview-frame{margin:auto;background:#ddd;border:1px solid #aaa;overflow:hidden;transition:width .2s,height .2s}.gos3-preview-frame.desktop{width:100%;height:clamp(360px,calc(100vh - 360px),650px)}.gos3-preview-frame.mobile{width:390px;max-width:100%;height:clamp(460px,calc(100vh - 360px),720px);border:8px solid #222;border-radius:24px}.gos3-preview-frame iframe{width:100%;height:100%;border:0;background:#fff}.gos3-preview-card p{color:#666;margin-bottom:0}@media(max-width:1180px){.gos3-grid{grid-template-columns:1fr}.gos3-preview-card{position:static;max-height:none;overflow:visible}}@media(max-width:782px){.gos3-fields,.gos3-design-fields{grid-template-columns:1fr}.gos3-element-row{grid-template-columns:1fr}.gos3-preview-frame.desktop{height:500px}}
 .gos3-presets{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:10px 12px;background:#f6f7f7;border-radius:5px}.gos3-presets span{font-weight:700}.gos3-presets small{color:#666}
 
 .gos3-direct-editor{border:1px solid #c3c4c7;background:#f6f7f7;border-radius:5px;padding:10px 12px;margin:0 0 12px}.gos3-direct-editor-label{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}.gos3-direct-editor-label small{color:#646970}.gos3-direct-elements,.gos3-direct-actions{display:flex;gap:6px;flex-wrap:wrap}.gos3-direct-actions{margin-top:8px;padding-top:8px;border-top:1px solid #dcdcde}.gos3-direct-elements .button.active{background:#2271b1;border-color:#2271b1;color:#fff}
@@ -8,3 +8,98 @@
 .gos3-snap-toggle{display:inline-flex;align-items:center;gap:6px;margin-left:4px;font-weight:600}.gos3-snap-help{display:inline-flex;align-items:center;color:#646970;margin-left:2px}
 
 .gos3-layout-tools .gos3-layout-save-row,.gos3-layout-tools .gos3-layout-manage-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:14px 0}.gos3-layout-tools .gos3-layout-save-row label,.gos3-layout-tools .gos3-layout-manage-row>label:first-child{display:flex;flex-direction:column;gap:6px;font-weight:600;min-width:260px}.gos3-layout-tools input[type=text],.gos3-layout-tools select{min-width:260px}.gos3-layout-tools .gos3-inline-check{display:inline-flex;align-items:center;gap:5px;padding-bottom:7px}.gos3-layout-status{min-height:1.5em;margin:8px 0!important;color:#2271b1!important;font-weight:600}.gos3-layout-status.is-error{color:#d63638!important}.gos3-copy-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:14px;margin:14px 0}.gos3-copy-grid fieldset{border:1px solid #dcdcde;border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:8px}.gos3-copy-grid legend{font-weight:700;padding:0 5px}.gos3-copy-grid label{display:flex;align-items:center;gap:6px}.gos3-copy-grid .button{align-self:flex-start;margin-top:4px}@media(max-width:900px){.gos3-copy-grid{grid-template-columns:1fr}.gos3-layout-tools input[type=text],.gos3-layout-tools select{min-width:0;width:100%}.gos3-layout-tools .gos3-layout-save-row label,.gos3-layout-tools .gos3-layout-manage-row>label:first-child{min-width:100%}}
+.gos3-event-overview-fields{margin-top:8px;padding:16px;border:1px solid #dcdcde;border-radius:6px;background:#f9f9f9}.gos3-event-overview-fields h3{margin:0 0 6px}.gos3-shortcode-box{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0;padding:12px;background:#fff;border-left:4px solid #2271b1}.gos3-shortcode-box code{font-size:13px;user-select:all}.gos3-event-info-preview{margin-top:14px;padding:14px;background:#fff;border:1px solid #dcdcde}.gos3-event-info-preview>.gos-event-info{margin:10px 0 0}.gos3-event-info-preview .gos-event-info__heading{font-size:18px}.gos3-event-info-preview .gos-event-info__row{grid-template-columns:7em 1fr}
+
+.gos3-preview-mode-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.gos3-preview-mode-row .gos3-segment{margin-bottom:12px}.gos3-overview-preview{margin:auto;border:1px solid #aaa;background:#e9e9e9;overflow:auto;box-sizing:border-box;transition:width .2s,height .2s}.gos3-overview-preview.desktop{width:100%;height:clamp(360px,calc(100vh - 300px),650px)}.gos3-overview-preview.mobile{width:390px;max-width:100%;height:clamp(460px,calc(100vh - 300px),720px);border:8px solid #222;border-radius:24px}.gos3-overview-page{width:min(920px,calc(100% - 32px));min-height:100%;margin:0 auto;padding:34px 42px;background:#fff;box-sizing:border-box}.gos3-overview-page-title{font-size:24px;font-weight:700;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid #ddd}.gos3-overview-preview.mobile .gos3-overview-page{width:100%;padding:22px 16px}.gos3-overview-preview.mobile .gos3-overview-page-title{font-size:20px}.gos3-overview-preview .gos-event-info{margin:0;padding:1.25em 1.4em;border:1px solid #d8d4cc;background:#fff;box-sizing:border-box}.gos3-overview-preview .gos-event-info__heading{margin:0 0 .9em;font-size:1.35em}.gos3-overview-preview .gos-event-info__row{display:grid;grid-template-columns:7em minmax(0,1fr);gap:.8em;padding:.55em 0;border-top:1px solid #ece9e3}.gos3-overview-preview .gos-event-info__row:first-of-type{border-top:0}.gos3-overview-preview .gos-event-info__label{font-weight:700}.gos3-overview-preview .gos-event-info__value p{margin:0 0 .35em}.gos3-overview-preview .gos-event-info__value p:last-child{margin-bottom:0}.gos3-overview-preview .gos-event-info__note{margin:.9em 0 0;color:#555}.gos3-overview-empty{padding:24px;border:1px dashed #aaa;background:#fafafa;color:#666}@media(max-width:600px){.gos3-overview-preview .gos-event-info{padding:1em}.gos3-overview-preview .gos-event-info__row{grid-template-columns:1fr;gap:.25em}}
+
+.gos3-preview-targets{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 8px}.gos3-preview-targets-label{font-weight:700}.gos3-preview-contexts{margin:0 0 10px}.gos3-preview-context{min-height:34px;display:flex;align-items:center}.gos3-preview-context small{color:#646970}.gos3-preview-context[hidden]{display:none!important}
+
+.gos3-preview-actions[hidden],.gos3-preview-frame[hidden],.gos3-overview-preview[hidden],.gos3-direct-editor[hidden],[data-preview-tools][hidden],[data-preview-context][hidden]{display:none!important}
+
+/* 3.2.8 管理画面整理 */
+.gos-admin-intro{
+  margin:6px 0 18px;
+  font-size:14px;
+}
+.gos-section-title,
+.gos-card > h2,
+.gos-panel > h2{
+  scroll-margin-top:48px;
+}
+
+
+
+/* 3.2.10 実クラスに合わせたプレビュー改善 */
+.gos3-grid{
+  grid-template-columns:minmax(520px,42%) minmax(680px,58%);
+}
+
+.gos3-preview-card{
+  position:sticky;
+  top:32px;
+  max-height:calc(100vh - 44px);
+  overflow:auto;
+  padding:16px;
+}
+
+.gos3-preview-head{
+  margin-bottom:8px;
+}
+
+.gos3-preview-targets,
+.gos3-preview-contexts,
+.gos3-preview-actions{
+  margin-bottom:8px;
+}
+
+.gos3-direct-editor{
+  margin:8px 0 10px;
+  padding:0;
+  border:1px solid #c3c4c7;
+  background:#f6f7f7;
+  border-radius:5px;
+}
+
+.gos3-direct-editor > summary{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  cursor:pointer;
+  padding:10px 12px;
+  user-select:none;
+}
+
+.gos3-direct-editor > summary small{
+  color:#646970;
+  font-weight:400;
+}
+
+.gos3-direct-editor-body{
+  padding:0 12px 12px;
+}
+
+.gos3-direct-editor:not([open])::after{
+  display:none;
+}
+
+.gos3-preview-frame.desktop{
+  height:calc(100vh - 255px);
+  min-height:520px;
+  max-height:760px;
+}
+
+.gos3-preview-frame.mobile{
+  height:calc(100vh - 255px);
+  min-height:560px;
+  max-height:760px;
+}
+
+@media(max-width:1180px){
+  .gos3-grid{grid-template-columns:1fr}
+  .gos3-preview-card{
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
+}

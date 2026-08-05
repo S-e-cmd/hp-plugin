@@ -1,3 +1,12 @@
+
+let gosActualPreviewReloadTimer = null;
+function scheduleActualPreviewReload(callback, delay){
+  clearTimeout(gosActualPreviewReloadTimer);
+  gosActualPreviewReloadTimer = setTimeout(function(){
+    if(typeof callback === 'function') callback();
+  }, typeof delay === 'number' ? delay : 900);
+}
+
 (function(){
 'use strict';
 document.addEventListener('DOMContentLoaded',function(){
@@ -34,6 +43,15 @@ document.addEventListener('DOMContentLoaded',function(){
   const snapToggle=document.getElementById('gos3-snap-center');
   const snapStorageKey='gos3-center-snap-enabled';
   const snapThreshold=10;
+  let previewTarget='status',previewSeason='spring';
+  const previewTargetBox=document.getElementById('gos3-preview-targets');
+  const previewSeasonBox=document.getElementById('gos3-preview-season');
+  const overviewPreview=document.getElementById('gos3-overview-preview');
+  const overviewPreviewBody=document.getElementById('gos3-overview-preview-body');
+  const overviewPageTitle=document.getElementById('gos3-overview-page-title');
+  const previewActions=document.querySelector('[data-preview-tools="status"]');
+  const eventOverviewActions=document.querySelector('[data-preview-tools="event_overview"]');
+  const directEditor=document.getElementById('gos3-direct-editor');
   try{if(snapToggle&&localStorage.getItem(snapStorageKey)==='0')snapToggle.checked=false}catch(e){}
 
   function showEvent(key){
@@ -146,6 +164,221 @@ document.addEventListener('DOMContentLoaded',function(){
   function currentPreviewEvent(){
     return eventKey;
   }
+  function escHtml(value){return String(value==null?'':value).replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
+  function eventField(season,key){return form.querySelector('[name="events['+season+']['+key+']"]')}
+  function eventValue(season,key){const el=eventField(season,key);return el?(el.type==='checkbox'?(el.checked?'1':''):el.value):''}
+  function formatDateJa(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return '';const [y,m,d]=value.split('-').map(Number);return y+'年'+m+'月'+d+'日'}
+  function overviewDateText(season){
+    const mode=eventValue(season,'date_display_mode')||'usual';
+    if(mode==='hidden'||mode==='none')return '';
+    if(mode==='confirmed'){
+      const start=eventValue(season,'start').trim(),end=eventValue(season,'end').trim();
+      if(start&&end){
+        if(start===end)return formatDateJaWithWeekday(start);
+        return formatDateJaWithWeekday(start)+'～'+formatDateJaWithWeekday(end);
+      }
+      if(start||end)return formatDateJaWithWeekday(start||end);
+      return '';
+    }
+    return eventValue(season,'usual_period').trim();
+  }
+  function formatDateJaWithWeekday(value){
+    if(!value)return '';
+    const parts=String(value).split('-').map(Number);
+    if(parts.length!==3||!parts[0]||!parts[1]||!parts[2])return String(value);
+    const d=new Date(parts[0],parts[1]-1,parts[2]);
+    const weekdays=['日','月','火','水','木','金','土'];
+    return parts[0]+'年'+parts[1]+'月'+parts[2]+'日（'+weekdays[d.getDay()]+'）';
+  }
+
+  function formatTimeJa(value){if(!/^\d{2}:\d{2}$/.test(value||''))return '';const [h,m]=value.split(':').map(Number);return m===0?h+'時':h+'時'+String(m).padStart(2,'0')+'分'}
+  function renderOverviewPreview(){
+    if(!overviewPreviewBody)return;
+    const s=previewSeason;
+    const label=eventValue(s,'label').trim();
+    if(overviewPageTitle)overviewPageTitle.textContent=label||({spring:'春',autumn:'秋',winter:'冬'}[s]+'の催し');
+    const rows=[];
+    const date=overviewDateText(s);if(date)rows.push([eventValue(s,'date_label').trim()||'開苑期間',escHtml(date)]);
+    const open=formatTimeJa(eventValue(s,'open_time')),close=formatTimeJa(eventValue(s,'close_time'));
+    if(open||close){let time=escHtml(open+(open&&close?'～':'')+close);const closeLabel=eventValue(s,'close_time_label').trim();if(close&&closeLabel)time+='（'+escHtml(closeLabel)+'）';const note=eventValue(s,'time_note').trim();if(note)time+='<br><small>'+escHtml(note)+'</small>';rows.push([eventValue(s,'time_label').trim()||'開苑時間',time])}
+    const details=(eventValue(s,'price_details').trim()||eventValue(s,'price').trim());if(details){let ph=details.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(x=>'<p>'+escHtml(x)+'</p>').join('');const pn=eventValue(s,'price_note').trim();if(pn)ph+='<p><small>'+escHtml(pn).replace(/\n/g,'<br>')+'</small></p>';rows.push([eventValue(s,'admission_label').trim()||'入苑料',ph])}
+    const heading=eventValue(s,'overview_heading').trim();let html='<section class="gos-event-info">';if(heading)html+='<h2 class="gos-event-info__heading">'+escHtml(heading)+'</h2>';rows.forEach(row=>html+='<div class="gos-event-info__row"><div class="gos-event-info__label">'+escHtml(row[0])+'</div><div class="gos-event-info__value">'+row[1]+'</div></div>');const overviewNote=eventValue(s,'overview_note').trim();if(overviewNote)html+='<div class="gos-event-info__note">'+escHtml(overviewNote).replace(/\n/g,'<br>')+'</div>';html+='</section>';overviewPreviewBody.innerHTML=html;
+  }
+  const previewTargets={
+    status:{
+      label:'開催状況',
+      context:'status',
+      panel:frame,
+      tools:previewActions,
+      editor:directEditor,
+      statusText:'開催状況の編集内容をトップページ実画面で表示します。',
+      render:()=>submitPreview()
+    },
+    event_overview:{
+      label:'会期ページ',
+      context:'event_overview',
+      panel:overviewPreview,
+      tools:eventOverviewActions,
+      editor:null,
+      statusText:'会期ページ内の表示見本です。PC／スマホ実画面では現在の固定ページ上で確認できます。',
+      render:()=>renderOverviewPreview()
+    }
+  };
+  function setPreviewTarget(target){
+    if(!previewTargets[target])target='status';
+    previewTarget=target;
+    document.querySelectorAll('[data-preview-target]').forEach(b=>b.classList.toggle('active',b.dataset.previewTarget===target));
+    document.querySelectorAll('[data-preview-context]').forEach(el=>{el.hidden=el.dataset.previewContext!==target});
+    Object.keys(previewTargets).forEach(key=>{
+      const cfg=previewTargets[key];
+      if(cfg.panel)cfg.panel.hidden=key!==target;
+      if(cfg.tools)cfg.tools.hidden=key!==target;
+      if(cfg.editor)cfg.editor.hidden=key!==target;
+    });
+    const cfg=previewTargets[target];
+    status.textContent=cfg.statusText;
+    cfg.render();
+  }
+  function setPreviewSeason(season){previewSeason=season;document.querySelectorAll('[data-preview-season]').forEach(b=>b.classList.toggle('active',b.dataset.previewSeason===season));renderOverviewPreview()}
+  function eventPagePreviewUrl(deviceName){
+    const raw=eventValue(previewSeason,'detail_url').trim();
+    if(!raw)throw new Error('選択中の季節に会期ページURLが設定されていません。');
+    const u=new URL(raw,window.location.href);
+    u.searchParams.set('gos_event_info_preview',previewSeason);
+    u.searchParams.set('gos_preview_token',token);
+    u.searchParams.set('gos_preview_device',deviceName);
+    u.searchParams.set('_gos',String(Date.now()));
+    return u.toString();
+  }
+  function liveEventPreviewHtml(season){
+    const rows=[];
+    const date=overviewDateText(season);
+    if(date)rows.push([eventValue(season,'date_label').trim()||'開苑期間',date,'']);
+    const open=formatTimeJa(eventValue(season,'open_time')),close=formatTimeJa(eventValue(season,'close_time'));
+    if(open||close){
+      let value=open+(open&&close?'～':'')+close;
+      const closeLabel=eventValue(season,'close_time_label').trim();
+      if(close&&closeLabel)value+='（'+closeLabel+'）';
+      rows.push([eventValue(season,'time_label').trim()||'開苑時間',value,eventValue(season,'time_note').trim()]);
+    }
+    const details=eventValue(season,'price_details').trim()||eventValue(season,'price').trim();
+    if(details)rows.push([eventValue(season,'admission_label').trim()||'入苑料',details,eventValue(season,'price_note').trim()]);
+    let html='<section id="gos-event-info-live-preview" class="gos-event-page-info" data-gos-event-season="'+escHtml(season)+'">';
+    html+='<div class="gos-event-page-info__rows">';
+    rows.forEach(row=>{
+      html+='<div class="gos-event-page-info__row"><span class="gos-event-page-info__label">'+escHtml(row[0])+'：</span><span class="gos-event-page-info__value">'+escHtml(row[1]).replace(/\\n/g,'<br>');
+      if(row[2])html+='<small class="gos-event-page-info__note">'+escHtml(row[2]).replace(/\\n/g,'<br>')+'</small>';
+      html+='</span></div>';
+    });
+    html+='</div>';
+    const overviewNote=eventValue(season,'overview_note').trim();
+    if(overviewNote)html+='<p class="gos-event-page-info__footer-note">'+escHtml(overviewNote).replace(/\\n/g,'<br>')+'</p>';
+    html+='</section>';
+    return html;
+  }
+  function injectEventPagePreview(win,season){
+    let stopped=false,observer=null,keepAliveTimer=null,scrollDone=false;
+    function ensurePreview(){
+      if(stopped||!win||win.closed){cleanup();return false}
+      let doc;
+      try{doc=win.document}catch(e){return false}
+      if(!doc||doc.readyState==='loading')return false;
+      let style=doc.getElementById('gos-event-info-live-preview-style');
+      if(!style){
+        style=doc.createElement('style');
+        style.id='gos-event-info-live-preview-style';
+        style.textContent='.gos-event-page-info{box-sizing:border-box!important;font-family:inherit!important;font-size:14px!important;font-weight:400!important;line-height:2!important;color:inherit!important}.gos-event-page-info__rows{display:block!important}.gos-event-page-info__row{display:grid!important;grid-template-columns:6.4em minmax(0,1fr)!important;column-gap:0!important;margin:0 0 .55em!important;font:inherit!important;line-height:inherit!important}.gos-event-page-info__label{display:block!important;white-space:nowrap!important;font:inherit!important;text-align:justify!important;text-align-last:justify!important;padding-right:.45em!important}.gos-event-page-info__value{display:block!important;min-width:0!important;white-space:pre-line!important;font:inherit!important;line-height:inherit!important}.gos-event-page-info__note{display:block!important;margin:0!important;font:inherit!important;line-height:inherit!important;white-space:pre-line!important}.gos-event-page-info__footer-note{margin:.55em 0 0!important;font:inherit!important;line-height:inherit!important;white-space:pre-line!important}@media(max-width:782px){.gos-event-page-info{font-size:12px!important;line-height:1.9!important}.gos-event-page-info__row{grid-template-columns:6.4em minmax(0,1fr)!important;column-gap:0!important;margin-bottom:.5em!important}}';
+        (doc.head||doc.documentElement).appendChild(style);
+      }
+      let block=doc.getElementById('gos-event-info-live-preview');
+      if(!block){
+        const holder=doc.createElement('div');
+        holder.innerHTML=liveEventPreviewHtml(season);
+        block=holder.firstElementChild;
+        if(!block)return false;
+        const contentRoot=doc.querySelector('main article,.entry-content,.page-content,article,main,#primary,.site-main')||doc.body;
+        const excluded='footer,header,nav,aside,#wpadminbar,.calendar,.tribe-events,.widget';
+        const candidates=Array.from(contentRoot.querySelectorAll('p,li,dd,dt,tr,div')).filter(el=>{
+          if(el.closest(excluded))return false;
+          const text=(el.textContent||'').replace(/\s+/g,'');
+          if(!text||text.length>320)return false;
+          const blocks=Array.from(el.children).filter(c=>/^(DIV|SECTION|ARTICLE|TABLE|UL|OL)$/i.test(c.tagName));
+          return !blocks.length&&(text.includes('開苑期間')||text.includes('開催期間'));
+        });
+        const anchor=candidates[0]||null;
+        if(anchor&&anchor.parentNode){
+          anchor.parentNode.insertBefore(block,anchor);
+        }else{
+          const heading=Array.from(contentRoot.querySelectorAll('h1,h2,h3,h4')).find(el=>!el.closest(excluded)&&(el.textContent||'').replace(/\s+/g,'').includes('会期情報'));
+          if(heading&&heading.parentNode)heading.parentNode.insertBefore(block,heading.nextSibling);
+          else contentRoot.insertBefore(block,contentRoot.firstChild);
+        }
+      }else{
+        const holder=doc.createElement('div');
+        holder.innerHTML=liveEventPreviewHtml(season);
+        const fresh=holder.firstElementChild;
+        if(fresh&&block.innerHTML!==fresh.innerHTML)block.replaceWith(fresh);
+        block=fresh||block;
+      }
+      const contentRoot=doc.querySelector('main article,.entry-content,.page-content,article,main,#primary,.site-main')||doc.body;
+      const excluded='footer,header,nav,aside,#wpadminbar,.calendar,.tribe-events,.widget';
+      Array.from(contentRoot.querySelectorAll('p,li,dd,dt,tr,div')).forEach(el=>{
+        if(el===block||el.closest('#gos-event-info-live-preview')||el.closest(excluded))return;
+        const text=(el.textContent||'').replace(/\s+/g,'');
+        if(!text||text.length>420)return;
+        const blocks=Array.from(el.children).filter(c=>/^(DIV|SECTION|ARTICLE|TABLE|UL|OL)$/i.test(c.tagName));
+        if(!blocks.length&&(text.includes('開苑期間')||text.includes('開催期間')||text.includes('開苑時間')||text.includes('入苑料'))){
+          el.style.setProperty('display','none','important');
+        }
+      });
+      if(!scrollDone&&block){
+        block.scrollIntoView({behavior:'smooth',block:'center'});
+        scrollDone=true;
+      }
+      status.textContent='会期ページ実画面へ編集中の内容を差し込みました。';
+      return true;
+    }
+    function cleanup(){
+      stopped=true;
+      if(observer){observer.disconnect();observer=null}
+      if(keepAliveTimer){window.clearInterval(keepAliveTimer);keepAliveTimer=null}
+    }
+    let attempts=0;
+    const waitTimer=window.setInterval(()=>{
+      attempts++;
+      if(!win||win.closed){window.clearInterval(waitTimer);cleanup();return}
+      if(ensurePreview()){
+        window.clearInterval(waitTimer);
+        let doc;
+        try{doc=win.document}catch(e){return}
+        if(doc&&doc.documentElement){
+          observer=new win.MutationObserver(()=>{window.setTimeout(ensurePreview,0)});
+          observer.observe(doc.documentElement,{childList:true,subtree:true});
+        }
+        keepAliveTimer=window.setInterval(ensurePreview,1000);
+      }else if(attempts>200){
+        window.clearInterval(waitTimer);
+        status.textContent='会期ページ実画面への差し込みに失敗しました。';
+      }
+    },100);
+  }
+  function openEventPagePreview(deviceName){
+    let url;
+    try{url=eventPagePreviewUrl(deviceName)}catch(err){layoutMessage(err.message,true);status.textContent=err.message;return}
+    const mobile=deviceName==='mobile';
+    const win=window.open('about:blank',mobile?'gos_event_mobile_preview':'gos_event_pc_preview',mobile?'width=430,height=900,resizable=yes,scrollbars=yes':'');
+    if(!win){status.textContent='ポップアップがブロックされました。';return}
+    win.document.write('<!doctype html><meta charset="utf-8"><title>会期ページプレビュー準備中</title><p style="font-family:sans-serif;padding:20px">会期ページ実画面プレビュー準備中…</p>');
+    savePreviewData().then(()=>{
+      win.location.replace(url);
+      injectEventPagePreview(win,previewSeason);
+    }).catch(err=>{win.close();status.textContent='会期ページプレビュー失敗：'+err.message});
+  }
+  function reloadEventOverview(){
+    renderOverviewPreview();
+    status.textContent='会期ページの表示見本を更新しました。実画面は各実画面ボタンで開き直してください。';
+  }
+
   function previewUrl(deviceName){
     const u=new URL(GOS_V3.homeUrl,window.location.href);
     u.searchParams.set('garden_status_preview','1');
@@ -285,13 +518,18 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   renderLayoutTemplates(root.dataset.selectedLayout||'');
+  function findTemplateIdByName(name,excludeId){
+    const target=String(name||'').trim();
+    return Object.keys(layoutTemplates).find(id=>id!==excludeId&&String((layoutTemplates[id]||{}).name||'').trim()===target)||'';
+  }
   const saveNewButton=document.getElementById('gos3-layout-save-new');
   if(saveNewButton)saveNewButton.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();
-    const name=(layoutName&&layoutName.value||'').trim();
+    const name=(layoutName&&layoutName.value||'').trim().slice(0,80);
     if(!name){layoutMessage('レイアウト名を入力してください。',true);if(layoutName)layoutName.focus();return}
+    if(findTemplateIdByName(name,'')){layoutMessage('同じ名前のレイアウトがすでにあります。既存レイアウトを選択して「上書き」を使用してください。',true);return}
     const pair=currentDesignPair();
     const id=makeLayoutId();
-    layoutTemplates[id]={name:name.slice(0,80),desktop:clone(pair.desktop),mobile:clone(pair.mobile)};
+    layoutTemplates[id]={name,desktop:clone(pair.desktop),mobile:clone(pair.mobile)};
     syncTemplatesHidden();
     saveNewButton.disabled=true;
     persistLayoutTemplates('「'+layoutTemplates[id].name+'」を新規保存しました。',id)
@@ -302,8 +540,15 @@ document.addEventListener('DOMContentLoaded',function(){
   const overwriteButton=document.getElementById('gos3-layout-overwrite');
   if(overwriteButton)overwriteButton.addEventListener('click',()=>{
     const id=selectedTemplateId();if(!id||!layoutTemplates[id]){layoutMessage('上書きするレイアウトを選択してください。',true);return}
-    const pair=currentDesignPair();layoutTemplates[id].desktop=clone(pair.desktop);layoutTemplates[id].mobile=clone(pair.mobile);
-    persistLayoutTemplates('「'+layoutTemplates[id].name+'」を上書きしました。',id).catch(()=>{});
+    const tpl=layoutTemplates[id];
+    if(!window.confirm('「'+tpl.name+'」を現在のレイアウトで上書きしますか？'))return;
+    const before=clone(tpl);
+    const pair=currentDesignPair();
+    tpl.desktop=clone(pair.desktop);tpl.mobile=clone(pair.mobile);
+    overwriteButton.disabled=true;
+    persistLayoutTemplates('「'+tpl.name+'」を上書きしました。',id)
+      .catch(()=>{layoutTemplates[id]=before;syncTemplatesHidden();renderLayoutTemplates(id)})
+      .finally(()=>{overwriteButton.disabled=false});
   });
   const loadButton=document.getElementById('gos3-layout-load');
   if(loadButton)loadButton.addEventListener('click',()=>{
@@ -316,8 +561,15 @@ document.addEventListener('DOMContentLoaded',function(){
   const renameButton=document.getElementById('gos3-layout-rename');
   if(renameButton)renameButton.addEventListener('click',()=>{
     const id=selectedTemplateId(),tpl=layoutTemplates[id];if(!tpl){layoutMessage('名前を変更するレイアウトを選択してください。',true);return}
-    const name=window.prompt('新しいレイアウト名',tpl.name||'');if(name===null)return;const clean=name.trim();if(!clean){layoutMessage('名前を入力してください。',true);return}
-    tpl.name=clean.slice(0,80);syncTemplatesHidden();renderLayoutTemplates(id);persistLayoutTemplates('レイアウト名を変更しました。',id).catch(()=>{});
+    const name=window.prompt('新しいレイアウト名',tpl.name||'');if(name===null)return;
+    const clean=name.trim().slice(0,80);if(!clean){layoutMessage('名前を入力してください。',true);return}
+    if(findTemplateIdByName(clean,id)){layoutMessage('同じ名前のレイアウトがすでにあります。別の名前を入力してください。',true);return}
+    const before=String(tpl.name||'');
+    if(clean===before.trim()){layoutMessage('名前は変更されていません。',false);return}
+    tpl.name=clean;syncTemplatesHidden();renderLayoutTemplates(id);renameButton.disabled=true;
+    persistLayoutTemplates('「'+before+'」を「'+clean+'」へ変更しました。',id)
+      .catch(()=>{tpl.name=before;syncTemplatesHidden();renderLayoutTemplates(id)})
+      .finally(()=>{renameButton.disabled=false});
   });
   const deleteButton=document.getElementById('gos3-layout-delete');
   if(deleteButton)deleteButton.addEventListener('click',()=>{
@@ -359,7 +611,18 @@ document.addEventListener('DOMContentLoaded',function(){
     designsInput.value=JSON.stringify(designs);loadDesign();queuePreview();layoutMessage(count+'件へコピーしました。下の「設定を保存」で確定します。',false);
   });
 
-  iframe.addEventListener('load',()=>{status.textContent='編集中の内容を実画面へ反映しました。';bindDirectEditor();});
+
+  document.querySelectorAll('[data-gos-event-shortcode]').forEach(button=>button.addEventListener('click',()=>{
+    const shortcode=button.dataset.gosEventShortcode||'';
+    if(!shortcode)return;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(shortcode).then(()=>layoutMessage('ショートコードをコピーしました。',false));
+    }else{
+      window.prompt('このショートコードをコピーしてください',shortcode);
+    }
+  }));
+
+  iframe.addEventListener('load',()=>{if(previewTarget==='status')status.textContent='開催状況を実画面へ反映しました。';bindDirectEditor();});
   document.querySelectorAll('[data-event]').forEach(b=>b.addEventListener('click',()=>showEvent(b.dataset.event)));
   stateSelect.addEventListener('change',()=>showState(stateSelect.value));
   document.querySelectorAll('[data-device]').forEach(b=>b.addEventListener('click',()=>showDevice(b.dataset.device)));
@@ -368,11 +631,17 @@ document.addEventListener('DOMContentLoaded',function(){
     previewDevice=b.dataset.previewDevice; previewDeviceInput.value=previewDevice;
     document.querySelectorAll('[data-preview-device]').forEach(x=>x.classList.toggle('active',x===b));
     frame.classList.toggle('mobile',previewDevice==='mobile'); frame.classList.toggle('desktop',previewDevice==='desktop');
-    submitPreview();
+    if(overviewPreview){overviewPreview.classList.toggle('mobile',previewDevice==='mobile');overviewPreview.classList.toggle('desktop',previewDevice==='desktop')}
+    previewTargets[previewTarget].render();
   }));
+  document.querySelectorAll('[data-preview-target]').forEach(b=>b.addEventListener('click',()=>setPreviewTarget(b.dataset.previewTarget)));
+  document.querySelectorAll('[data-preview-season]').forEach(b=>b.addEventListener('click',()=>setPreviewSeason(b.dataset.previewSeason)));
   document.getElementById('gos3-open-pc').addEventListener('click',()=>openPreview('pc'));
   document.getElementById('gos3-open-mobile').addEventListener('click',()=>openPreview('mobile'));
   document.getElementById('gos3-reload-preview').addEventListener('click',submitPreview);
+  document.getElementById('gos3-open-event-pc').addEventListener('click',()=>openEventPagePreview('desktop'));
+  document.getElementById('gos3-open-event-mobile').addEventListener('click',()=>openEventPagePreview('mobile'));
+  document.getElementById('gos3-reload-event-overview').addEventListener('click',reloadEventOverview);
   if(stateMode)stateMode.addEventListener('change',syncPublicSelection);
   if(manualState)manualState.addEventListener('change',syncPublicSelection);
   if(manualEvent)manualEvent.addEventListener('change',syncPublicSelection);
@@ -388,14 +657,39 @@ document.addEventListener('DOMContentLoaded',function(){
     if(e.key==='ArrowLeft')x-=step;if(e.key==='ArrowRight')x+=step;if(e.key==='ArrowUp')y-=step;if(e.key==='ArrowDown')y+=step;
     setDesignValue(selectedElement+'_x',x);setDesignValue(selectedElement+'_y',y);queuePreview();e.preventDefault();
   });
-  form.addEventListener('input',e=>{if(e.target.matches('[data-design-key]'))saveDesign();queuePreview()});
-  form.addEventListener('change',e=>{if(e.target!==stateSelect&&e.target!==stateMode&&e.target!==manualState&&e.target!==manualEvent)queuePreview()});
+  form.addEventListener('input',e=>{if(e.target.matches('[data-design-key]'))saveDesign();if(previewTarget==='event_overview'&&e.target.name&&e.target.name.indexOf('events[')===0)renderOverviewPreview();else if(previewTarget==='status')queuePreview()});
+  form.addEventListener('change',e=>{if(previewTarget==='event_overview'&&e.target.name&&e.target.name.indexOf('events[')===0)renderOverviewPreview();else if(previewTarget==='status'&&e.target!==stateSelect&&e.target!==stateMode&&e.target!==manualState&&e.target!==manualEvent)queuePreview()});
   form.addEventListener('submit',()=>{saveDesign();syncTemplatesHidden()});
 
   showEvent(eventKey);
   showState(stateKey);
   showDevice('desktop');
   designReady=true;
-  submitPreview();
+  setPreviewTarget('status');
 });
+})();
+
+
+
+
+(function(){
+  let timer = null;
+  function isTextEditor(el){
+    if(!el) return false;
+    const tag=(el.tagName||'').toLowerCase();
+    if(tag==='textarea') return true;
+    if(tag!=='input') return false;
+    const type=(el.type||'text').toLowerCase();
+    return ['text','number','url','email','search','tel'].includes(type);
+  }
+  document.addEventListener('input', function(e){
+    if(!isTextEditor(e.target)) return;
+    const preview=document.getElementById('gos3-preview-frame');
+    if(!preview) return;
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      const btn=document.querySelector('[data-gos-preview-reload], #gos3-preview-reload, .gos3-preview-reload');
+      if(btn) btn.click();
+    }, 1000);
+  }, true);
 })();

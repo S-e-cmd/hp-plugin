@@ -16,13 +16,90 @@
 
 .gos3-preview-actions[hidden],.gos3-preview-frame[hidden],.gos3-overview-preview[hidden],.gos3-direct-editor[hidden],[data-preview-tools][hidden],[data-preview-context][hidden]{display:none!important}
 
-.gos-admin-intro{margin:6px 0 18px;font-size:14px}.gos-section-title,.gos-card>h2,.gos-panel>h2{scroll-margin-top:48px}
+/* 3.2.8 管理画面整理 */
+.gos-admin-intro{
+  margin:6px 0 18px;
+  font-size:14px;
+}
+.gos-section-title,
+.gos-card > h2,
+.gos-panel > h2{
+  scroll-margin-top:48px;
+}
 
-.gos3-grid{grid-template-columns:minmax(520px,42%) minmax(680px,58%)}
-.gos3-preview-card{position:sticky;top:32px;max-height:calc(100vh - 44px);overflow:auto;padding:16px}
-.gos3-preview-head{margin-bottom:8px}.gos3-preview-targets,.gos3-preview-contexts,.gos3-preview-actions{margin-bottom:8px}
-.gos3-direct-editor{margin:8px 0 10px;padding:0;border:1px solid #c3c4c7;background:#f6f7f7;border-radius:5px}
-.gos3-direct-editor>summary{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer;padding:10px 12px;user-select:none}
-.gos3-direct-editor>summary small{color:#646970;font-weight:400}.gos3-direct-editor-body{padding:0 12px 12px}.gos3-direct-editor:not([open])::after{display:none}
-.gos3-preview-frame.desktop{height:calc(100vh - 255px);min-height:520px;max-height:760px}.gos3-preview-frame.mobile{height:calc(100vh - 255px);min-height:560px;max-height:760px}
-@media(max-width:1180px){.gos3-grid{grid-template-columns:1fr}.gos3-preview-card{position:static;max-height:none;overflow:visible}}
+
+
+/* 3.2.10 実クラスに合わせたプレビュー改善 */
+.gos3-grid{
+  grid-template-columns:minmax(520px,42%) minmax(680px,58%);
+}
+
+.gos3-preview-card{
+  position:sticky;
+  top:32px;
+  max-height:calc(100vh - 44px);
+  overflow:auto;
+  padding:16px;
+}
+
+.gos3-preview-head{
+  margin-bottom:8px;
+}
+
+.gos3-preview-targets,
+.gos3-preview-contexts,
+.gos3-preview-actions{
+  margin-bottom:8px;
+}
+
+.gos3-direct-editor{
+  margin:8px 0 10px;
+  padding:0;
+  border:1px solid #c3c4c7;
+  background:#f6f7f7;
+  border-radius:5px;
+}
+
+.gos3-direct-editor > summary{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  cursor:pointer;
+  padding:10px 12px;
+  user-select:none;
+}
+
+.gos3-direct-editor > summary small{
+  color:#646970;
+  font-weight:400;
+}
+
+.gos3-direct-editor-body{
+  padding:0 12px 12px;
+}
+
+.gos3-direct-editor:not([open])::after{
+  display:none;
+}
+
+.gos3-preview-frame.desktop{
+  height:calc(100vh - 255px);
+  min-height:520px;
+  max-height:760px;
+}
+
+.gos3-preview-frame.mobile{
+  height:calc(100vh - 255px);
+  min-height:560px;
+  max-height:760px;
+}
+
+@media(max-width:1180px){
+  .gos3-grid{grid-template-columns:1fr}
+  .gos3-preview-card{
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
+}
