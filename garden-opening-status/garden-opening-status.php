@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.73
+ * Version: 3.2.74
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.73';
+    const VERSION = '3.2.74';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -32,14 +32,20 @@ final class Garden_Opening_Status_V3 {
         add_filter('body_class', [__CLASS__, 'body_class']);
         add_filter('language_attributes', [__CLASS__, 'language_attributes'], 20, 2);
         add_action('template_redirect', [__CLASS__, 'start_description_output_buffer'], -100);
+        add_action('template_redirect', [__CLASS__, 'start_permanent_guide_output_buffer'], -90);
+        add_action('pre_get_posts', [__CLASS__, 'exclude_permanent_guide_from_news_queries'], 20);
+        add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
         add_action('wp_head', [__CLASS__, 'output_hreflang_links'], 5);
         add_action('wp_head', [__CLASS__, 'output_facility_structured_data'], 6);
         add_action('wp_head', [__CLASS__, 'output_event_structured_data'], 7);
         add_action('wp_head', [__CLASS__, 'output_completed_notice_structured_data'], 8);
+        add_action('wp_head', [__CLASS__, 'output_permanent_guide_structured_data'], 9);
         add_filter('the_content', [__CLASS__, 'prepend_completed_event_notice'], 8);
         add_filter('the_content', [__CLASS__, 'event_page_preview_content'], 20);
         add_filter('the_content', [__CLASS__, 'expand_event_info_shortcodes'], 99);
+        add_filter('the_content', [__CLASS__, 'append_permanent_guide_modified_date'], 100);
         add_action('wp_footer', [__CLASS__, 'japanese_access_layout'], 96);
+        add_action('wp_footer', [__CLASS__, 'permanent_guide_frontend'], 95);
         add_action('wp_footer', [__CLASS__, 'instagram_gallery_fallback'], 97);
         add_action('wp_footer', [__CLASS__, 'multilingual_event_info_fallback'], 98);
         add_action('wp_footer', [__CLASS__, 'event_page_preview_fallback'], 100);
@@ -121,6 +127,136 @@ final class Garden_Opening_Status_V3 {
         }
 
         return $html . $meta;
+    }
+
+    private static function permanent_guide_config() {
+        $options = self::options(false);
+        return is_array($options['permanent_guide'] ?? null) ? $options['permanent_guide'] : [];
+    }
+
+    private static function permanent_guide_post_id() {
+        static $resolved = false;
+        static $post_id = 0;
+        if ($resolved) return $post_id;
+        $resolved = true;
+        $config = self::permanent_guide_config();
+        if (empty($config['enabled'])) return 0;
+        $url = trim((string)($config['url'] ?? ''));
+        if ($url === '') return 0;
+        $post_id = (int)url_to_postid($url);
+        return $post_id;
+    }
+
+    private static function is_permanent_guide_page() {
+        $post_id = self::permanent_guide_post_id();
+        return $post_id > 0 && is_singular() && get_queried_object_id() === $post_id;
+    }
+
+    public static function start_permanent_guide_output_buffer() {
+        if (is_admin() || !self::is_permanent_guide_page()) return;
+        ob_start([__CLASS__, 'filter_permanent_guide_output']);
+    }
+
+    private static function convert_article_schema_to_webpage(&$node) {
+        if (!is_array($node)) return;
+        if (isset($node['@type'])) {
+            $types = is_array($node['@type']) ? $node['@type'] : [$node['@type']];
+            $has_article = false;
+            $kept = [];
+            foreach ($types as $type) {
+                if (in_array($type, ['Article', 'NewsArticle', 'BlogPosting'], true)) {
+                    $has_article = true;
+                } else {
+                    $kept[] = $type;
+                }
+            }
+            if ($has_article) {
+                if (!in_array('WebPage', $kept, true)) $kept[] = 'WebPage';
+                $node['@type'] = count($kept) === 1 ? reset($kept) : array_values($kept);
+                unset($node['articleSection'], $node['wordCount'], $node['datePublished']);
+            }
+        }
+        foreach ($node as &$child) {
+            if (is_array($child)) self::convert_article_schema_to_webpage($child);
+        }
+        unset($child);
+    }
+
+    public static function filter_permanent_guide_output($html) {
+        if (!is_string($html) || $html === '') return $html;
+        return preg_replace_callback(
+            '~<script\b([^>]*type=["\']application/ld\+json["\'][^>]*)>(.*?)</script>~is',
+            static function($match) {
+                $data = json_decode(trim($match[2]), true);
+                if (!is_array($data)) return $match[0];
+                self::convert_article_schema_to_webpage($data);
+                return '<script' . $match[1] . '>'
+                    . wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    . '</script>';
+            },
+            $html
+        );
+    }
+
+    public static function filter_aioseo_permanent_guide_schema($graphs) {
+        if (!self::is_permanent_guide_page() || !is_array($graphs)) return $graphs;
+        self::convert_article_schema_to_webpage($graphs);
+        return $graphs;
+    }
+
+    public static function output_permanent_guide_structured_data() {
+        if (!self::is_permanent_guide_page()) return;
+        $post_id = self::permanent_guide_post_id();
+        $url = get_permalink($post_id);
+        if (!$url) return;
+        $data = [
+            '@context' => 'https://schema.org',
+            '@type' => 'WebPage',
+            '@id' => trailingslashit($url) . '#webpage',
+            'url' => $url,
+            'name' => get_the_title($post_id),
+            'inLanguage' => 'ja',
+            'dateModified' => get_post_modified_time(DATE_ATOM, false, $post_id),
+            'isPartOf' => [
+                '@type' => 'WebSite',
+                '@id' => home_url('/#website'),
+                'url' => home_url('/'),
+            ],
+            'about' => [
+                '@type' => ['TouristAttraction', 'Park'],
+                '@id' => home_url('/#garden'),
+            ],
+        ];
+        echo '<script type="application/ld+json">';
+        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo '</script>' . "\n";
+    }
+
+    public static function append_permanent_guide_modified_date($content) {
+        if (!is_string($content) || !self::is_permanent_guide_page() || !in_the_loop() || !is_main_query()) return $content;
+        $config = self::permanent_guide_config();
+        if (empty($config['show_modified_date'])) return $content;
+        $post_id = self::permanent_guide_post_id();
+        $modified = get_post_modified_time('Y年n月j日', false, $post_id);
+        if (!$modified) return $content;
+        return $content . '<p class="gos-permanent-guide__modified">最終更新：' . esc_html($modified) . '</p>';
+    }
+
+    public static function exclude_permanent_guide_from_news_queries($query) {
+        if (is_admin() || !is_object($query) || $query->is_singular()) return;
+        $config = self::permanent_guide_config();
+        if (empty($config['enabled']) || empty($config['exclude_from_news_list'])) return;
+        $post_id = self::permanent_guide_post_id();
+        if ($post_id <= 0) return;
+
+        $post_type = $query->get('post_type');
+        $types = is_array($post_type) ? $post_type : [$post_type];
+        $is_news_query = $query->is_post_type_archive('news') || in_array('news', $types, true);
+        if (!$is_news_query) return;
+
+        $excluded = array_map('absint', (array)$query->get('post__not_in'));
+        $excluded[] = $post_id;
+        $query->set('post__not_in', array_values(array_unique($excluded)));
     }
 
     /**
@@ -574,6 +710,15 @@ final class Garden_Opening_Status_V3 {
             'detail_button' => '会期・料金',
             'access_button' => 'アクセス',
             'aria_label' => '現在の開催状況',
+            'permanent_guide' => [
+                'enabled' => 1,
+                'url' => home_url('/news/notice/'),
+                'show_home' => 1,
+                'show_news_archive' => 1,
+                'exclude_from_news_list' => 1,
+                'show_modified_date' => 1,
+                'eyebrow' => 'ご来苑前にご確認ください',
+            ],
             'events' => [
                 'spring' => self::default_event('春の催し'),
                 'autumn' => self::default_event('秋の催し'),
@@ -1354,6 +1499,7 @@ final class Garden_Opening_Status_V3 {
 
     private static function purge_public_caches($options) {
         $urls = [home_url('/')];
+        if (!empty($options['permanent_guide']['url'])) $urls[] = $options['permanent_guide']['url'];
         if (!empty($options['events']) && is_array($options['events'])) {
             foreach ($options['events'] as $event) {
                 $url = trim((string)($event['detail_url'] ?? ''));
@@ -1418,6 +1564,16 @@ final class Garden_Opening_Status_V3 {
         $out['detail_button'] = sanitize_text_field($input['detail_button'] ?? '');
         $out['access_button'] = sanitize_text_field($input['access_button'] ?? '');
         $out['aria_label'] = sanitize_text_field($input['aria_label'] ?? '');
+        $guide = is_array($input['permanent_guide'] ?? null) ? $input['permanent_guide'] : [];
+        $out['permanent_guide'] = [
+            'enabled' => !empty($guide['enabled']) ? 1 : 0,
+            'url' => esc_url_raw($guide['url'] ?? ''),
+            'show_home' => !empty($guide['show_home']) ? 1 : 0,
+            'show_news_archive' => !empty($guide['show_news_archive']) ? 1 : 0,
+            'exclude_from_news_list' => !empty($guide['exclude_from_news_list']) ? 1 : 0,
+            'show_modified_date' => !empty($guide['show_modified_date']) ? 1 : 0,
+            'eyebrow' => sanitize_text_field($guide['eyebrow'] ?? ''),
+        ];
 
         foreach (self::event_keys() as $key) {
             $src = is_array($input['events'][$key] ?? null) ? $input['events'][$key] : [];
@@ -1626,6 +1782,7 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function body_class($classes) {
+        if (self::is_permanent_guide_page()) $classes[] = 'gos-permanent-guide-page';
         if (current_user_can('manage_options') && (!empty($_GET['garden_status_preview']) || !empty($_GET['gos_event_info_preview']))) {
             $device = sanitize_key($_GET['gos_preview_device'] ?? '');
             if ($device === 'mobile') $classes[] = 'gos-force-mobile';
@@ -2486,6 +2643,20 @@ final class Garden_Opening_Status_V3 {
                         </section>
 
                         <section class="gos3-card">
+                            <h2>常設案内</h2>
+                            <p class="description">指定した記事を、通常のお知らせではなく常設の案内ページとして表示します。タイトルと本文はWordPressの記事編集画面で変更してください。</p>
+                            <div class="gos3-fields">
+                                <label class="wide"><input type="checkbox" name="permanent_guide[enabled]" value="1" <?php checked(!empty($o['permanent_guide']['enabled'])); ?>> 常設案内表示を有効にする</label>
+                                <label class="wide">対象ページURL<input type="url" name="permanent_guide[url]" value="<?php echo esc_attr($o['permanent_guide']['url']); ?>" placeholder="<?php echo esc_attr(home_url('/news/notice/')); ?>"></label>
+                                <label class="wide">案内枠の上段文<input type="text" name="permanent_guide[eyebrow]" value="<?php echo esc_attr($o['permanent_guide']['eyebrow']); ?>"></label>
+                                <label><input type="checkbox" name="permanent_guide[show_home]" value="1" <?php checked(!empty($o['permanent_guide']['show_home'])); ?>> トップのお知らせ上部へ表示</label>
+                                <label><input type="checkbox" name="permanent_guide[show_news_archive]" value="1" <?php checked(!empty($o['permanent_guide']['show_news_archive'])); ?>> お知らせ一覧上部へ表示</label>
+                                <label><input type="checkbox" name="permanent_guide[exclude_from_news_list]" value="1" <?php checked(!empty($o['permanent_guide']['exclude_from_news_list'])); ?>> 通常のお知らせ一覧から除外</label>
+                                <label><input type="checkbox" name="permanent_guide[show_modified_date]" value="1" <?php checked(!empty($o['permanent_guide']['show_modified_date'])); ?>> ページ末尾に最終更新日を表示</label>
+                            </div>
+                        </section>
+
+                        <section class="gos3-card">
                             <h2>イベント・会期概要</h2>
                             <div class="gos3-segment" id="gos3-event-tabs"><?php foreach (self::event_keys() as $i=>$key): ?><button type="button" data-event="<?php echo esc_attr($key); ?>" class="<?php echo $i===0?'active':''; ?>"><?php echo esc_html(['spring'=>'春','autumn'=>'秋','winter'=>'冬'][$key]); ?></button><?php endforeach; ?></div>
                             <?php foreach (self::event_keys() as $i=>$key): $e=$o['events'][$key]; ?>
@@ -2868,6 +3039,86 @@ final class Garden_Opening_Status_V3 {
      * Japanese, English and Traditional Chinese access sections: use a two-column
      * information/map layout on desktop. Mobile remains vertically stacked.
      */
+    public static function permanent_guide_frontend() {
+        $config = self::permanent_guide_config();
+        if (empty($config['enabled'])) return;
+        $post_id = self::permanent_guide_post_id();
+        if ($post_id <= 0) return;
+        $url = get_permalink($post_id);
+        if (!$url) return;
+
+        $is_guide = self::is_permanent_guide_page();
+        $path = trim((string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
+        $show_card = (is_front_page() && !empty($config['show_home']))
+            || (!$is_guide && !empty($config['show_news_archive']) && ($path === 'news' || is_post_type_archive() || is_home()));
+        if (!$is_guide && !$show_card) return;
+
+        $title = get_the_title($post_id);
+        $eyebrow = trim((string)($config['eyebrow'] ?? ''));
+        $card = '<aside class="gos-permanent-guide-card" aria-label="常設案内">';
+        if ($eyebrow !== '') $card .= '<span class="gos-permanent-guide-card__eyebrow">' . esc_html($eyebrow) . '</span>';
+        $card .= '<a href="' . esc_url($url) . '">' . esc_html($title) . '</a></aside>';
+        ?>
+        <style id="gos-permanent-guide-style">
+        .gos-permanent-guide-card{box-sizing:border-box;width:100%;max-width:900px;margin:20px auto 28px;padding:17px 20px;border:1px solid #d4d4d4;border-left:5px solid #9e1638;background:#faf8f8;line-height:1.6}
+        .gos-permanent-guide-card__eyebrow{display:block;margin:0 0 3px;color:#666;font-size:13px}
+        .gos-permanent-guide-card>a{display:inline-block;color:inherit!important;font-size:17px;font-weight:600;text-decoration:none!important}
+        .gos-permanent-guide-card>a::after{content:' ›';font-weight:400}
+        .gos-permanent-guide-card>a:hover{text-decoration:underline!important}
+        .gos-permanent-guide-page .entry-meta,.gos-permanent-guide-page .post-meta,.gos-permanent-guide-page .article-meta,.gos-permanent-guide-page .article-date,.gos-permanent-guide-page .post-date,.gos-permanent-guide-page .single-post-navigation,.gos-permanent-guide-page .post-navigation,.gos-permanent-guide-page .nav-links,.gos-permanent-guide-page .sharedaddy,.gos-permanent-guide-page .share-buttons{display:none!important}
+        .gos-permanent-guide-page .gos-permanent-guide__modified{display:block!important;margin:34px 0 0!important;padding-top:12px!important;border-top:1px solid #ddd!important;color:#777!important;font-size:12px!important;text-align:right!important}
+        @media(max-width:600px){.gos-permanent-guide-card{width:calc(100% - 32px);margin:16px auto 24px;padding:14px 16px}.gos-permanent-guide-card>a{font-size:15px}}
+        </style>
+        <script id="gos-permanent-guide-script">
+        (function(){
+          var targetUrl=<?php echo wp_json_encode($url, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+          var cardHtml=<?php echo wp_json_encode($card, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+          var isGuide=<?php echo $is_guide ? 'true' : 'false'; ?>;
+          var showCard=<?php echo $show_card ? 'true' : 'false'; ?>;
+          var excludeFromList=<?php echo !empty($config['exclude_from_news_list']) ? 'true' : 'false'; ?>;
+          function text(el){return String((el&&el.textContent)||'').replace(/\s+/g,'').trim()}
+          function normalizedUrl(value){
+            try{var u=new URL(value,location.href);return (u.origin+u.pathname).replace(/\/+$/,'')}catch(e){return String(value||'').replace(/[?#].*$/,'').replace(/\/+$/,'')}
+          }
+          function hideNewsChrome(){
+            document.querySelectorAll('h1,h2,h3,h4').forEach(function(h){if(text(h)==='お知らせ')h.style.display='none'});
+            document.querySelectorAll('nav,ol,ul,.breadcrumb,.breadcrumbs').forEach(function(root){
+              if(!/HOME|ホーム/i.test(root.textContent||''))return;
+              root.querySelectorAll('li,a,span').forEach(function(el){if(text(el)==='お知らせ'){var li=el.closest('li');(li||el).style.display='none'}});
+            });
+            document.querySelectorAll('time.entry-date,time.published,.entry-date,.post-date,.article-date').forEach(function(el){el.style.display='none'});
+          }
+          function removeDuplicateCards(){
+            if(!excludeFromList)return;
+            var wanted=normalizedUrl(targetUrl);
+            document.querySelectorAll('a[href]').forEach(function(a){
+              if(normalizedUrl(a.href)!==wanted || a.closest('.gos-permanent-guide-card'))return;
+              var item=a.closest('article,.article02,.news-item,.post-item,.archive-item');
+              if(!item){
+                var li=a.closest('li');
+                if(li && (/news|post|article|archive/i.test(li.className||'') || li.querySelector('time')))item=li;
+              }
+              if(item && !item.closest('header,nav,footer'))item.remove();
+            });
+          }
+          function insertCard(){
+            if(!showCard || document.querySelector('.gos-permanent-guide-card'))return;
+            var heading=null;
+            Array.prototype.some.call(document.querySelectorAll('h1,h2,h3,h4'),function(h){if(text(h)==='お知らせ'){heading=h;return true}return false});
+            if(!heading)return;
+            heading.insertAdjacentHTML('afterend',cardHtml);
+          }
+          function apply(){
+            if(isGuide){hideNewsChrome();return}
+            removeDuplicateCards();insertCard();
+          }
+          if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
+          window.addEventListener('load',apply,{once:true});
+        })();
+        </script>
+        <?php
+    }
+
     public static function japanese_access_layout() {
         if (is_admin() || !is_page(['access', 'english', 'chinese'])) return;
         ?>
