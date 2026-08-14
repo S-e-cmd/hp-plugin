@@ -357,9 +357,7 @@ final class Garden_Opening_Status_V3 {
         foreach (self::event_keys() as $season) {
             if ($detail_season !== '' && $season !== $detail_season) continue;
 
-            $event = is_array($options['events'][$season] ?? null)
-                ? $options['events'][$season]
-                : [];
+            $event = self::event_from_options($options, $season);
 
             if (empty($event['enabled'])) continue;
             if (!self::event_released($event, $now)) continue;
@@ -526,7 +524,7 @@ final class Garden_Opening_Status_V3 {
         if (self::now() <= $end) return [];
 
         $options = self::options(false);
-        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+        $event = self::event_from_options($options, $season);
         $page_id = self::resolve_event_page_id($event, $season);
         $current_url = $page_id > 0 ? get_permalink($page_id) : trim((string)($event['detail_url'] ?? ''));
         if (!$current_url) $current_url = home_url('/schedule/');
@@ -1052,9 +1050,7 @@ final class Garden_Opening_Status_V3 {
         // 管理画面で各会期に設定された詳細ページURLを最優先で照合する。
         $options = self::options();
         foreach (self::event_keys() as $season) {
-            $event = is_array($options['events'][$season] ?? null)
-                ? $options['events'][$season]
-                : [];
+            $event = self::event_from_options($options, $season);
 
             $detail_path = self::normalize_event_page_path($event['detail_url'] ?? '');
             if ($detail_path !== '' && $request_path === $detail_path) {
@@ -1128,6 +1124,10 @@ final class Garden_Opening_Status_V3 {
         ob_start([__CLASS__, 'filter_event_page_output']);
     }
 
+    private static function event_from_options($options, $season) {
+        return is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+    }
+
     private static function event_price_details($event) {
         $price = trim((string)($event['price_details'] ?? ''));
         if ($price === '') $price = trim((string)($event['price'] ?? ''));
@@ -1144,7 +1144,7 @@ final class Garden_Opening_Status_V3 {
 
     private static function event_page_output_values($season) {
         $options = self::options(false);
-        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
+        $event = self::event_from_options($options, $season);
 
         $date = self::event_overview_date_text($event);
 
@@ -2361,7 +2361,7 @@ final class Garden_Opening_Status_V3 {
         $lang = self::normalize_event_info_lang($atts['lang']);
 
         $o = self::options(false);
-        $event = is_array($o['events'][$season] ?? null) ? $o['events'][$season] : [];
+        $event = self::event_from_options($o, $season);
 
         $date_text = self::localized_event_date_text($event, $lang);
         $open_text = self::format_time($event['open_time'] ?? '');
