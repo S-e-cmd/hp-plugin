@@ -1,0 +1,53 @@
+name: Temporary guarded event price helper reuse
+
+on:
+  push:
+    branches:
+      - agent/reuse-event-price-details-html
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded event price helper reuse workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse event price details helper
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+          old = "\n".join([
+              "        $details = trim((string)($event['price_details'] ?? ''));",
+              "        if ($details === '') $details = trim((string)($event['price'] ?? ''));",
+          ])
+          new = "        $details = self::event_price_details($event);"
+          if text.count(old) != 1:
+              raise SystemExit(f'unexpected event_info_html price fallback count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          if text.count('self::event_price_details($event)') != 3:
+              raise SystemExit(f'unexpected event_price_details call count: {text.count("self::event_price_details($event)")}')
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-reuse-event-price-details-html.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Reuse event price details helper in event info HTML"
+          git push origin HEAD:agent/reuse-event-price-details-html
