@@ -1,0 +1,26 @@
+name: Package garden opening status 3.2.79
+on:
+  push:
+    branches: [artifact/gos-3279-zip]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and package
+        shell: bash
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -F "Version: 3.2.79" garden-opening-status/garden-opening-status.php
+          rm -rf /tmp/gos-package
+          mkdir -p /tmp/gos-package
+          cp -a garden-opening-status /tmp/gos-package/
+          cd /tmp/gos-package
+          zip -qr garden-opening-status-v3.2.79.zip garden-opening-status
+          mv garden-opening-status-v3.2.79.zip "$GITHUB_WORKSPACE/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.79
+          path: garden-opening-status-v3.2.79.zip
