@@ -2053,14 +2053,7 @@ final class Garden_Opening_Status_V3 {
         if ($mode === 'confirmed') {
             $start = trim((string)($event['start'] ?? ''));
             $end = trim((string)($event['end'] ?? ''));
-
-            if ($start !== '' && $end !== '') {
-                return self::format_date_range($start, $end);
-            }
-            if ($start !== '') return self::format_date_range($start, $start);
-            if ($end !== '') return self::format_date_range($end, $end);
-
-            return '';
+            return self::format_date_range($start, $end);
         }
 
         return trim((string)($event['usual_period'] ?? ''));
