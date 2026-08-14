@@ -66,8 +66,6 @@
 
 .gos3-event-overview-fields{margin-top:8px;padding:16px;border:1px solid #dcdcde;border-radius:6px;background:#f9f9f9}
 .gos3-event-overview-fields h3{margin:0 0 6px}
-.gos3-shortcode-box{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0;padding:12px;background:#fff;border-left:4px solid #2271b1}
-.gos3-shortcode-box code{font-size:13px;user-select:all}
 .gos3-event-info-preview{margin-top:14px;padding:14px;background:#fff;border:1px solid #dcdcde}
 .gos3-event-info-preview>.gos-event-info{margin:10px 0 0}
 .gos3-event-info-preview .gos-event-info__heading{font-size:18px}
@@ -88,7 +86,6 @@
 .gos3-overview-preview .gos-event-info__value p{margin:0 0 .35em}
 .gos3-overview-preview .gos-event-info__value p:last-child{margin-bottom:0}
 .gos3-overview-preview .gos-event-info__note{margin:.9em 0 0;color:#555}
-.gos3-overview-empty{padding:24px;border:1px dashed #aaa;background:#fafafa;color:#666}
 
 .gos3-preview-targets{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .gos3-preview-targets-label{font-weight:700}
