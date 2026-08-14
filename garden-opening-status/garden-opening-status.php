@@ -2789,19 +2789,23 @@ final class Garden_Opening_Status_V3 {
         <?php
     }
 
+    private static function apply_instagram_settings_input($options, $input) {
+        $options['auto_home'] = !empty($input['auto_home']) ? 1 : 0;
+        $token = isset($input['access_token']) ? trim((string)wp_unslash($input['access_token'])) : '';
+        if ($token !== '') $options['access_token'] = sanitize_text_field($token);
+        $options['ig_user_id'] = sanitize_text_field((string)($input['ig_user_id'] ?? ''));
+        $version = sanitize_text_field((string)($input['api_version'] ?? 'v23.0'));
+        $options['api_version'] = preg_match('/^v?\d+\.\d+$/', $version) ? (strpos($version, 'v') === 0 ? $version : 'v'.$version) : 'v23.0';
+        $options['limit'] = max(1, min(12, absint($input['limit'] ?? 6)));
+        $options['heading'] = sanitize_text_field((string)($input['heading'] ?? 'Instagram'));
+        $options['profile_url'] = esc_url_raw((string)($input['profile_url'] ?? ''));
+        return $options;
+    }
+
     public static function instagram_save() {
         if (!current_user_can('manage_options')) wp_die('権限がありません。');
         check_admin_referer('gos_instagram_save');
-        $o = self::instagram_options();
-        $o['auto_home'] = !empty($_POST['auto_home']) ? 1 : 0;
-        $token = isset($_POST['access_token']) ? trim((string)wp_unslash($_POST['access_token'])) : '';
-        if ($token !== '') $o['access_token'] = sanitize_text_field($token);
-        $o['ig_user_id'] = sanitize_text_field((string)($_POST['ig_user_id'] ?? ''));
-        $version = sanitize_text_field((string)($_POST['api_version'] ?? 'v23.0'));
-        $o['api_version'] = preg_match('/^v?\d+\.\d+$/', $version) ? (strpos($version, 'v') === 0 ? $version : 'v'.$version) : 'v23.0';
-        $o['limit'] = max(1, min(12, absint($_POST['limit'] ?? 6)));
-        $o['heading'] = sanitize_text_field((string)($_POST['heading'] ?? 'Instagram'));
-        $o['profile_url'] = esc_url_raw((string)($_POST['profile_url'] ?? ''));
+        $o = self::apply_instagram_settings_input(self::instagram_options(), $_POST);
         self::store_instagram_options($o);
         if (!wp_next_scheduled('gos_instagram_cron')) wp_schedule_event(time()+300, 'gos_six_hours', 'gos_instagram_cron');
         wp_safe_redirect(add_query_arg(['page'=>'gos-instagram-gallery','gos_instagram_status'=>'saved'], admin_url('options-general.php')));
