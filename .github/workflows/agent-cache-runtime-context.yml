@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'Add guarded runtime context cache workflow'
+    if: github.event.head_commit.message == 'Fix guarded runtime context cache workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,19 +23,21 @@ jobs:
           if texts[0] != texts[1]:
               raise SystemExit('duplicate PHP copies differ before cleanup')
           text = texts[0]
-          old = """    private static function runtime_context() {
-        $o = self::options();
-        $forced_state = '';
-        $forced_event = '';
-"""
-          new = """    private static function runtime_context() {
-        static $context = null;
-        if ($context !== null) return $context;
-
-        $o = self::options();
-        $forced_state = '';
-        $forced_event = '';
-"""
+          old = '\n'.join([
+              '    private static function runtime_context() {',
+              '        $o = self::options();',
+              "        $forced_state = '';",
+              "        $forced_event = '';",
+          ])
+          new = '\n'.join([
+              '    private static function runtime_context() {',
+              '        static $context = null;',
+              '        if ($context !== null) return $context;',
+              '',
+              '        $o = self::options();',
+              "        $forced_state = '';",
+              "        $forced_event = '';",
+          ])
           if text.count(old) != 1:
               raise SystemExit(f'unexpected runtime_context start count: {text.count(old)}')
           text = text.replace(old, new, 1)
