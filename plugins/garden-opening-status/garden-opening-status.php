@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.85
+ * Version: 3.2.86
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.85';
+    const VERSION = '3.2.86';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -43,6 +43,8 @@ final class Garden_Opening_Status_V3 {
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_event_page_description'], 110);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
+        add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_event_page_facebook_tags'], 110);
+        add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_event_page_twitter_tags'], 110);
         add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
         add_action('wp_head', [__CLASS__, 'output_hreflang_links'], 5);
         add_action('wp_head', [__CLASS__, 'output_facility_structured_data'], 6);
@@ -243,6 +245,57 @@ final class Garden_Opening_Status_V3 {
         return !empty($seo['description']) ? $seo['description'] : $description;
     }
 
+    /**
+     * Use the seasonal page's featured image for social sharing. The same image
+     * already represents the page in AIOSEO's WebPage schema. Fall back to the
+     * site's established share image only when a seasonal page has no thumbnail.
+     */
+    private static function event_page_social_image_data() {
+        if (self::current_event_page_season() === '') return [];
+
+        $post_id = (int)get_queried_object_id();
+        if ($post_id > 0) {
+            $thumbnail_id = get_post_thumbnail_id($post_id);
+            if ($thumbnail_id) {
+                $image = wp_get_attachment_image_src($thumbnail_id, 'full');
+                if (is_array($image) && !empty($image[0])) {
+                    return [
+                        'url' => esc_url_raw((string)$image[0]),
+                        'width' => !empty($image[1]) ? (string)(int)$image[1] : '',
+                        'height' => !empty($image[2]) ? (string)(int)$image[2] : '',
+                    ];
+                }
+            }
+        }
+
+        return [
+            'url' => home_url('/wp-content/uploads/2021/03/main1_sp.png'),
+            'width' => '1450',
+            'height' => '860',
+        ];
+    }
+
+    public static function filter_aioseo_event_page_facebook_tags($tags) {
+        if (!is_array($tags)) return $tags;
+        $image = self::event_page_social_image_data();
+        if (empty($image['url'])) return $tags;
+
+        $tags['og:image'] = $image['url'];
+        $tags['og:image:secure_url'] = $image['url'];
+        if ($image['width'] !== '') $tags['og:image:width'] = $image['width'];
+        if ($image['height'] !== '') $tags['og:image:height'] = $image['height'];
+        return $tags;
+    }
+
+    public static function filter_aioseo_event_page_twitter_tags($tags) {
+        if (!is_array($tags)) return $tags;
+        $image = self::event_page_social_image_data();
+        if (empty($image['url'])) return $tags;
+
+        $tags['twitter:image'] = $image['url'];
+        return $tags;
+    }
+
     public static function filter_aioseo_multilingual_facebook_tags($tags) {
         $language = self::information_page_language();
         $seo = self::multilingual_seo_config($language);
@@ -278,7 +331,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.85 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.86 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
