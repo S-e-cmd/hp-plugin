@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'Add guarded event price details cleanup workflow'
+    if: github.event.head_commit.message == 'Retry guarded event price details cleanup workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,16 +29,18 @@ jobs:
           if text.count(anchor) != 1:
               raise SystemExit(f'unexpected event_page_output_values anchor count: {text.count(anchor)}')
           text = text.replace(anchor, helper, 1)
-          old_page = "        $price = trim((string)($event['price_details'] ?? ''));\n        if ($price === '') $price = trim((string)($event['price'] ?? ''));"
-          if text.count(old_page) != 1:
-              raise SystemExit(f'unexpected page price fallback count: {text.count(old_page)}')
-          text = text.replace(old_page, "        $price = self::event_price_details($event);", 1)
-          old_shortcode = "        $price_details = trim((string)($event['price_details'] ?? ''));\n        if ($price_details === '') $price_details = trim((string)($event['price'] ?? ''));"
-          if text.count(old_shortcode) != 1:
-              raise SystemExit(f'unexpected shortcode price fallback count: {text.count(old_shortcode)}')
-          text = text.replace(old_shortcode, "        $price_details = self::event_price_details($event);", 1)
+          old_price = "        $price = trim((string)($event['price_details'] ?? ''));\n        if ($price === '') $price = trim((string)($event['price'] ?? ''));"
+          if text.count(old_price) != 2:
+              raise SystemExit(f'unexpected $price fallback count: {text.count(old_price)}')
+          text = text.replace(old_price, "        $price = self::event_price_details($event);")
+          old_price_details = "        $price_details = trim((string)($event['price_details'] ?? ''));\n        if ($price_details === '') $price_details = trim((string)($event['price'] ?? ''));"
+          if text.count(old_price_details) != 1:
+              raise SystemExit(f'unexpected $price_details fallback count: {text.count(old_price_details)}')
+          text = text.replace(old_price_details, "        $price_details = self::event_price_details($event);", 1)
           if text.count('private static function event_price_details($event)') != 1:
               raise SystemExit('event_price_details helper count mismatch')
+          if old_price in text or old_price_details in text:
+              raise SystemExit('price fallback remains after cleanup')
           for p in paths:
               p.write_text(text, encoding='utf-8')
           PY
