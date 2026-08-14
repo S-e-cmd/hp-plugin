@@ -1,0 +1,33 @@
+name: Apply notice page SEO 3.2.93
+on:
+  push:
+    branches: [feature/notice-page-seo-3293]
+    paths: ['.github/workflows/agent-notice-seo-3293.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/notice-page-seo-3293
+      - name: Apply patch
+        run: python3 .github/agent-notice-3293.py
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.93' garden-opening-status/garden-opening-status.php
+          grep -F '上野東照宮ぼたん苑の入苑案内｜料金・支払い・撮影・注意事項' garden-opening-status/garden-opening-status.php
+          grep -F "post_name === 'notice'" garden-opening-status/garden-opening-status.php
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m 'Optimize notice page SEO metadata in 3.2.93'
+          git push origin HEAD:feature/notice-page-seo-3293
