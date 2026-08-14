@@ -1,0 +1,71 @@
+name: Temporary guarded event extraction cleanup
+
+on:
+  push:
+    branches:
+      - agent/centralize-event-from-options
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded event extraction cleanup workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Centralize event extraction fallback
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+
+          anchor = "    private static function event_price_details($event) {\n"
+          helper = (
+              "    private static function event_from_options($options, $season) {\n"
+              "        return is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];\n"
+              "    }\n\n"
+              "    private static function event_price_details($event) {\n"
+          )
+          if text.count(anchor) != 1:
+              raise SystemExit(f'unexpected helper anchor count: {text.count(anchor)}')
+          text = text.replace(anchor, helper, 1)
+
+          patterns = [
+              ("            $event = is_array($options['events'][$season] ?? null)\n                ? $options['events'][$season]\n                : [];", "            $event = self::event_from_options($options, $season);"),
+              ("        $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];", "        $event = self::event_from_options($options, $season);"),
+              ("        $event = is_array($o['events'][$season] ?? null) ? $o['events'][$season] : [];", "        $event = self::event_from_options($o, $season);"),
+          ]
+          counts = [text.count(old) for old, _ in patterns]
+          if counts != [2, 2, 1]:
+              raise SystemExit(f'unexpected event fallback counts: {counts}')
+          for old, new in patterns:
+              text = text.replace(old, new)
+
+          if text.count('private static function event_from_options($options, $season)') != 1:
+              raise SystemExit('event_from_options helper count mismatch')
+          if text.count('self::event_from_options(') != 5:
+              raise SystemExit(f'unexpected helper call count: {text.count("self::event_from_options(")}')
+
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-event-from-options.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Centralize event extraction fallback"
+          git push origin HEAD:agent/centralize-event-from-options
