@@ -1129,7 +1129,8 @@ final class Garden_Opening_Status_V3 {
     }
 
     private static function event_price_details($event) {
-        $price = self::event_price_details($event);
+        $price = trim((string)($event['price_details'] ?? ''));
+        if ($price === '') $price = trim((string)($event['price'] ?? ''));
         return $price;
     }
 
