@@ -1,0 +1,25 @@
+name: Package garden opening status 3.2.77
+
+on:
+  push:
+    branches:
+      - artifact/gos-3277-zip
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version
+        run: |
+          grep -q "Version: 3.2.77" garden-opening-status/garden-opening-status.php
+          grep -q "const VERSION = '3.2.77';" garden-opening-status/garden-opening-status.php
+      - name: Build WordPress plugin ZIP
+        run: zip -r garden-opening-status-v3.2.77.zip garden-opening-status
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.77
+          path: garden-opening-status-v3.2.77.zip
