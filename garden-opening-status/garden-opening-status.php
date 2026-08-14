@@ -759,15 +759,14 @@ final class Garden_Opening_Status_V3 {
     }
 
     private static function maybe_migrate_layout_options() {
+        $main = get_option(self::OPTION, []);
         $existing = get_option(self::LAYOUTS_OPTION, null);
         if ($existing === null) {
-            $main = get_option(self::OPTION, []);
             $legacy = is_array($main) ? self::sanitize_layout_templates($main['layout_templates'] ?? []) : [];
             add_option(self::LAYOUTS_OPTION, $legacy, '', false);
         }
         $existing_default = get_option(self::DEFAULT_LAYOUT_OPTION, null);
         if ($existing_default === null) {
-            $main = get_option(self::OPTION, []);
             $legacy_default = is_array($main) ? sanitize_key((string)($main['default_layout_template'] ?? '')) : '';
             $templates = self::sanitize_layout_templates(get_option(self::LAYOUTS_OPTION, []));
             if ($legacy_default !== '' && !isset($templates[$legacy_default])) $legacy_default = '';
