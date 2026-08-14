@@ -1,12 +1,4 @@
 
-let gosActualPreviewReloadTimer = null;
-function scheduleActualPreviewReload(callback, delay){
-  clearTimeout(gosActualPreviewReloadTimer);
-  gosActualPreviewReloadTimer = setTimeout(function(){
-    if(typeof callback === 'function') callback();
-  }, typeof delay === 'number' ? delay : 900);
-}
-
 (function(){
 'use strict';
 document.addEventListener('DOMContentLoaded',function(){
@@ -44,8 +36,6 @@ document.addEventListener('DOMContentLoaded',function(){
   const snapStorageKey='gos3-center-snap-enabled';
   const snapThreshold=10;
   let previewTarget='status',previewSeason='spring';
-  const previewTargetBox=document.getElementById('gos3-preview-targets');
-  const previewSeasonBox=document.getElementById('gos3-preview-season');
   const overviewPreview=document.getElementById('gos3-overview-preview');
   const overviewPreviewBody=document.getElementById('gos3-overview-preview-body');
   const overviewPageTitle=document.getElementById('gos3-overview-page-title');
@@ -167,7 +157,6 @@ document.addEventListener('DOMContentLoaded',function(){
   function escHtml(value){return String(value==null?'':value).replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
   function eventField(season,key){return form.querySelector('[name="events['+season+']['+key+']"]')}
   function eventValue(season,key){const el=eventField(season,key);return el?(el.type==='checkbox'?(el.checked?'1':''):el.value):''}
-  function formatDateJa(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return '';const [y,m,d]=value.split('-').map(Number);return y+'年'+m+'月'+d+'日'}
   function overviewDateText(season){
     const mode=eventValue(season,'date_display_mode')||'usual';
     if(mode==='hidden'||mode==='none')return '';
