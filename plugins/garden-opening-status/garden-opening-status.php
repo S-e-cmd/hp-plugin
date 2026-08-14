@@ -1597,8 +1597,7 @@ final class Garden_Opening_Status_V3 {
     }
 
     public static function force_mobile_preview($is_mobile) {
-        if (!current_user_can('manage_options')) return $is_mobile;
-        if (empty($_GET['garden_status_preview']) && empty($_GET['gos_event_info_preview'])) return $is_mobile;
+        if (!self::is_any_preview()) return $is_mobile;
         $device = sanitize_key($_GET['gos_preview_device'] ?? '');
         if ($device === 'mobile') return true;
         if ($device === 'desktop') return false;
@@ -1607,7 +1606,7 @@ final class Garden_Opening_Status_V3 {
 
     public static function body_class($classes) {
         if (self::is_permanent_guide_page()) $classes[] = 'gos-permanent-guide-page';
-        if (current_user_can('manage_options') && (!empty($_GET['garden_status_preview']) || !empty($_GET['gos_event_info_preview']))) {
+        if (self::is_any_preview()) {
             $device = sanitize_key($_GET['gos_preview_device'] ?? '');
             if ($device === 'mobile') $classes[] = 'gos-force-mobile';
             if ($device === 'desktop') $classes[] = 'gos-force-desktop';
@@ -1617,7 +1616,7 @@ final class Garden_Opening_Status_V3 {
     }
 
     private static function event_page_preview_html() {
-        if (!current_user_can('manage_options') || empty($_GET['gos_event_info_preview'])) return '';
+        if (!self::is_event_info_preview()) return '';
         $token = sanitize_key($_GET['gos_preview_token'] ?? '');
         $season = sanitize_key($_GET['gos_event_info_preview'] ?? '');
         if (!$token || !self::is_event_key($season)) return '';
@@ -1874,6 +1873,14 @@ final class Garden_Opening_Status_V3 {
 
     private static function is_status_preview() {
         return current_user_can('manage_options') && !empty($_GET['garden_status_preview']);
+    }
+
+    private static function is_event_info_preview() {
+        return current_user_can('manage_options') && !empty($_GET['gos_event_info_preview']);
+    }
+
+    private static function is_any_preview() {
+        return self::is_status_preview() || self::is_event_info_preview();
     }
 
     private static function runtime_context() {
