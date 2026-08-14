@@ -2729,6 +2729,10 @@ final class Garden_Opening_Status_V3 {
         return array_replace(self::instagram_defaults(), $saved);
     }
 
+    private static function store_instagram_options($options) {
+        update_option('gos_instagram_gallery_options', $options, false);
+    }
+
     public static function instagram_cron_schedules($schedules) {
         if (!isset($schedules['gos_six_hours'])) {
             $schedules['gos_six_hours'] = ['interval' => 21600, 'display' => '6時間ごと'];
@@ -2800,7 +2804,7 @@ final class Garden_Opening_Status_V3 {
         $o['limit'] = max(1, min(12, absint($_POST['limit'] ?? 6)));
         $o['heading'] = sanitize_text_field((string)($_POST['heading'] ?? 'Instagram'));
         $o['profile_url'] = esc_url_raw((string)($_POST['profile_url'] ?? ''));
-        update_option('gos_instagram_gallery_options', $o, false);
+        self::store_instagram_options($o);
         if (!wp_next_scheduled('gos_instagram_cron')) wp_schedule_event(time()+300, 'gos_six_hours', 'gos_instagram_cron');
         wp_safe_redirect(add_query_arg(['page'=>'gos-instagram-gallery','gos_instagram_status'=>'saved'], admin_url('options-general.php')));
         exit;
@@ -2818,7 +2822,7 @@ final class Garden_Opening_Status_V3 {
         $o = self::instagram_options();
         if (empty($o['access_token'])) {
             $o['last_error'] = 'アクセストークンが未設定です。';
-            update_option('gos_instagram_gallery_options', $o, false);
+            self::store_instagram_options($o);
             return false;
         }
         $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
@@ -2834,7 +2838,7 @@ final class Garden_Opening_Status_V3 {
         ]);
         if (is_wp_error($response)) {
             $o['last_error'] = $response->get_error_message();
-            update_option('gos_instagram_gallery_options', $o, false);
+            self::store_instagram_options($o);
             return false;
         }
         $code = wp_remote_retrieve_response_code($response);
@@ -2842,7 +2846,7 @@ final class Garden_Opening_Status_V3 {
         if ($code < 200 || $code >= 300 || !is_array($body) || !isset($body['data'])) {
             $msg = is_array($body) && !empty($body['error']['message']) ? $body['error']['message'] : 'HTTP ' . $code;
             $o['last_error'] = sanitize_text_field($msg);
-            update_option('gos_instagram_gallery_options', $o, false);
+            self::store_instagram_options($o);
             return false;
         }
         $items = [];
@@ -2862,13 +2866,13 @@ final class Garden_Opening_Status_V3 {
         }
         if (!$items) {
             $o['last_error'] = '表示できる投稿がありませんでした。';
-            update_option('gos_instagram_gallery_options', $o, false);
+            self::store_instagram_options($o);
             return false;
         }
         $o['items'] = $items;
         $o['last_fetch'] = time();
         $o['last_error'] = '';
-        update_option('gos_instagram_gallery_options', $o, false);
+        self::store_instagram_options($o);
         return true;
     }
 
