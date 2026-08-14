@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.83
+ * Version: 3.2.84
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.83';
+    const VERSION = '3.2.84';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -269,7 +269,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.83 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.84 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -2317,6 +2317,11 @@ final class Garden_Opening_Status_V3 {
         }
 
         if ($mode === 'confirmed') {
+            // Confirmed dates may be stored before the information embargo lifts.
+            // Until the event is released, keep public pages on the usual period.
+            if (!self::event_released($event, self::now())) {
+                return trim((string)($event['usual_period'] ?? ''));
+            }
             $start = trim((string)($event['start'] ?? ''));
             $end = trim((string)($event['end'] ?? ''));
             return self::format_date_range($start, $end);
@@ -2386,6 +2391,14 @@ final class Garden_Opening_Status_V3 {
 
         $mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
         if ($mode === 'hidden' || $mode === 'none') return '';
+
+        if ($mode === 'confirmed') {
+            // Match the Japanese fixed-page rule: unreleased confirmed dates are
+            // never exposed through English / Traditional Chinese event blocks.
+            if (!self::event_released($event, self::now())) {
+                $mode = 'usual';
+            }
+        }
 
         if ($mode === 'confirmed') {
             $start = trim((string)($event['start'] ?? ''));
