@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.76
+ * Version: 3.2.77
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.76';
+    const VERSION = '3.2.77';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -3423,6 +3423,26 @@ final class Garden_Opening_Status_V3 {
         if (is_admin()) return;
         $o = self::instagram_options();
         if (empty($o['items'])) return;
+        $lang = self::information_page_language();
+        if ($lang === 'en') {
+            $lightbox_labels = [
+                'dialog' => 'Instagram image preview',
+                'close' => 'Close',
+                'open' => 'Open on Instagram',
+            ];
+        } elseif ($lang === 'zh-Hant') {
+            $lightbox_labels = [
+                'dialog' => 'Instagram 圖片放大顯示',
+                'close' => '關閉',
+                'open' => '在 Instagram 開啟',
+            ];
+        } else {
+            $lightbox_labels = [
+                'dialog' => 'Instagram画像拡大表示',
+                'close' => '閉じる',
+                'open' => 'Instagramで開く',
+            ];
+        }
         ?>
         <style id="gos-instagram-lightbox-style">
         .gos-instagram-lightbox{position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(0,0,0,.82);box-sizing:border-box}.gos-instagram-lightbox[hidden]{display:none!important}.gos-instagram-lightbox__dialog{position:relative;max-width:min(92vw,980px);max-height:94vh;padding:18px 18px 12px;background:#fff7ef;box-shadow:0 12px 46px rgba(0,0,0,.35);box-sizing:border-box;overflow:auto}.gos-instagram-lightbox__image{display:block;max-width:100%;max-height:calc(94vh - 145px);width:auto;height:auto;margin:0 auto;object-fit:contain}.gos-instagram-lightbox__caption{margin:12px 4px 0;color:#111;font-size:18px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}.gos-instagram-lightbox__instagram{display:inline-block;margin:8px 4px 0;color:#555!important;font-size:13px;text-decoration:underline!important}.gos-instagram-lightbox__close{position:fixed;top:14px;right:18px;width:52px;height:52px;border:3px solid #222;border-radius:50%;background:#fff;color:#222;font-size:38px;line-height:42px;font-family:Arial,sans-serif;cursor:pointer;box-shadow:0 2px 0 rgba(255,255,255,.8);z-index:2}.gos-instagram-lightbox-open{overflow:hidden!important}@media(max-width:600px){.gos-instagram-lightbox{padding:14px}.gos-instagram-lightbox__dialog{max-width:100%;max-height:92vh;padding:10px 10px 9px}.gos-instagram-lightbox__image{max-height:calc(92vh - 125px)}.gos-instagram-lightbox__caption{font-size:15px;margin-top:9px}.gos-instagram-lightbox__close{top:8px;right:8px;width:44px;height:44px;font-size:32px;line-height:34px;border-width:2px}}
@@ -3431,6 +3451,7 @@ final class Garden_Opening_Status_V3 {
         (function(){
             if(window.GOSInstagramLightboxReady)return;
             window.GOSInstagramLightboxReady=true;
+            var labels=<?php echo wp_json_encode($lightbox_labels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
             var modal=null,lastFocused=null;
             function ensure(){
                 if(modal)return modal;
@@ -3439,8 +3460,10 @@ final class Garden_Opening_Status_V3 {
                 modal.hidden=true;
                 modal.setAttribute('role','dialog');
                 modal.setAttribute('aria-modal','true');
-                modal.setAttribute('aria-label','Instagram画像拡大表示');
-                modal.innerHTML='<button type="button" class="gos-instagram-lightbox__close" aria-label="閉じる">×</button><div class="gos-instagram-lightbox__dialog"><img class="gos-instagram-lightbox__image" alt=""><div class="gos-instagram-lightbox__caption"></div><a class="gos-instagram-lightbox__instagram" target="_blank" rel="noopener noreferrer">Instagramで開く</a></div>';
+                modal.setAttribute('aria-label',labels.dialog);
+                modal.innerHTML='<button type="button" class="gos-instagram-lightbox__close">×</button><div class="gos-instagram-lightbox__dialog"><img class="gos-instagram-lightbox__image" alt=""><div class="gos-instagram-lightbox__caption"></div><a class="gos-instagram-lightbox__instagram" target="_blank" rel="noopener noreferrer"></a></div>';
+                modal.querySelector('.gos-instagram-lightbox__close').setAttribute('aria-label',labels.close);
+                modal.querySelector('.gos-instagram-lightbox__instagram').textContent=labels.open;
                 document.body.appendChild(modal);
                 modal.querySelector('.gos-instagram-lightbox__close').addEventListener('click',close);
                 modal.addEventListener('click',function(e){if(e.target===modal)close()});
