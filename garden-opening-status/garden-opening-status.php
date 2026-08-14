@@ -204,6 +204,12 @@ final class Garden_Opening_Status_V3 {
         return $graphs;
     }
 
+    private static function output_json_ld($data) {
+        echo '<script type="application/ld+json">';
+        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo '</script>' . "\n";
+    }
+
     public static function output_permanent_guide_structured_data() {
         if (!self::is_permanent_guide_page()) return;
         $post_id = self::permanent_guide_post_id();
@@ -227,9 +233,7 @@ final class Garden_Opening_Status_V3 {
                 '@id' => home_url('/#garden'),
             ],
         ];
-        echo '<script type="application/ld+json">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . "\n";
+        self::output_json_ld($data);
     }
 
     public static function append_permanent_guide_modified_date($content) {
@@ -336,9 +340,7 @@ final class Garden_Opening_Status_V3 {
         ];
 
         echo "\n<!-- Garden facility structured data -->\n";
-        echo '<script type="application/ld+json">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . "\n";
+        self::output_json_ld($data);
     }
 
     /**
@@ -468,9 +470,7 @@ final class Garden_Opening_Status_V3 {
         ];
 
         echo "\n<!-- Garden event structured data -->\n";
-        echo '<script type="application/ld+json">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . "\n";
+        self::output_json_ld($data);
     }
 
     /**
@@ -596,9 +596,7 @@ final class Garden_Opening_Status_V3 {
             ],
             'inLanguage' => 'ja',
         ];
-        echo '<script type="application/ld+json">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . "\n";
+        self::output_json_ld($data);
     }
 
     private static function state_keys() {
