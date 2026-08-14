@@ -978,6 +978,10 @@ final class Garden_Opening_Status_V3 {
     }
 
 
+    private static function known_event_page_ids() {
+        return ['spring' => 19, 'autumn' => 47, 'winter' => 49];
+    }
+
     private static function resolve_event_page_id($event, $season) {
         // まず管理画面の詳細ページURLを優先する。
         $url = trim((string)($event['detail_url'] ?? ''));
@@ -1019,8 +1023,7 @@ final class Garden_Opening_Status_V3 {
 
         // 現在のサイト構成に対する最終フォールバック。
         // タイトルが一致することを確認してから使用する。
-        $known_ids = ['spring' => 19, 'autumn' => 47, 'winter' => 49];
-        $known_id = (int)($known_ids[$season] ?? 0);
+        $known_id = (int)(self::known_event_page_ids()[$season] ?? 0);
         if ($known_id) {
             $page = get_post($known_id);
             if ($page && $page->post_type === 'page') {
@@ -1060,12 +1063,9 @@ final class Garden_Opening_Status_V3 {
         }
 
         // 現在運用中の固定ページID。
-        $known_ids = [
-            19 => 'spring',
-            47 => 'autumn',
-            49 => 'winter',
-        ];
-        if (isset($known_ids[$page_id])) return $known_ids[$page_id];
+        foreach (self::known_event_page_ids() as $season => $known_id) {
+            if ($page_id === (int)$known_id) return $season;
+        }
 
         // URL末尾による互換判定。ページ構成変更後も判定できるよう複数候補を持つ。
         $path_candidates = [
