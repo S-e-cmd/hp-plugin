@@ -1,0 +1,34 @@
+name: Package garden opening status 3.2.84
+on:
+  push:
+    branches: [artifact/gos-3284-wp-zip]
+    paths: ['.github/workflows/agent-package-gos-3284.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: artifact/gos-3284-wp-zip
+      - name: Validate plugin
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -F 'Version: 3.2.84' garden-opening-status/garden-opening-status.php
+      - name: Build WordPress zip
+        run: |
+          mkdir -p dist/garden-opening-status
+          cp garden-opening-status/garden-opening-status.php dist/garden-opening-status/
+          cp garden-opening-status/readme.txt dist/garden-opening-status/
+          mkdir -p dist/garden-opening-status/assets
+          cp garden-opening-status/assets/admin.css dist/garden-opening-status/assets/
+          cp garden-opening-status/assets/admin.js dist/garden-opening-status/assets/
+          cd dist
+          zip -r garden-opening-status-v3.2.84.zip garden-opening-status
+          unzip -t garden-opening-status-v3.2.84.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.84
+          path: dist/garden-opening-status-v3.2.84.zip
+          if-no-files-found: error
