@@ -1,0 +1,62 @@
+name: Temporary Instagram lightbox i18n 3.2.77
+
+on:
+  push:
+    branches:
+      - feature/instagram-lightbox-i18n-3277
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Add guarded Instagram lightbox i18n workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Localize lightbox labels
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          php_paths=[Path('garden-opening-status/garden-opening-status.php'),Path('plugins/garden-opening-status/garden-opening-status.php')]
+          readme_paths=[Path('garden-opening-status/readme.txt'),Path('plugins/garden-opening-status/readme.txt')]
+          php=[p.read_text(encoding='utf-8') for p in php_paths]
+          readmes=[p.read_text(encoding='utf-8') for p in readme_paths]
+          if php[0]!=php[1]: raise SystemExit('PHP mirrors differ before change')
+          if readmes[0]!=readmes[1]: raise SystemExit('readme mirrors differ before change')
+          text=php[0]
+          if text.count('Version: 3.2.76')!=1 or text.count("const VERSION = '3.2.76';")!=1: raise SystemExit('unexpected version markers')
+          text=text.replace('Version: 3.2.76','Version: 3.2.77',1).replace("const VERSION = '3.2.76';","const VERSION = '3.2.77';",1)
+          old="""        $o = self::instagram_options();\n        if (empty($o['items'])) return;\n        ?>\n        <style id=\"gos-instagram-lightbox-style\">"""
+          new="""        $o = self::instagram_options();\n        if (empty($o['items'])) return;\n        $lang = self::information_page_language();\n        if ($lang === 'en') {\n            $lightbox_labels = [\n                'dialog' => 'Instagram image preview',\n                'close' => 'Close',\n                'open' => 'Open on Instagram',\n            ];\n        } elseif ($lang === 'zh-Hant') {\n            $lightbox_labels = [\n                'dialog' => 'Instagram 圖片放大顯示',\n                'close' => '關閉',\n                'open' => '在 Instagram 開啟',\n            ];\n        } else {\n            $lightbox_labels = [\n                'dialog' => 'Instagram画像拡大表示',\n                'close' => '閉じる',\n                'open' => 'Instagramで開く',\n            ];\n        }\n        ?>\n        <style id=\"gos-instagram-lightbox-style\">"""
+          if text.count(old)!=1: raise SystemExit('lightbox label insertion boundary not found exactly once')
+          text=text.replace(old,new,1)
+          old_js="""            var modal=null,lastFocused=null;\n            function ensure(){\n                if(modal)return modal;\n                modal=document.createElement('div');\n                modal.className='gos-instagram-lightbox';\n                modal.hidden=true;\n                modal.setAttribute('role','dialog');\n                modal.setAttribute('aria-modal','true');\n                modal.setAttribute('aria-label','Instagram画像拡大表示');\n                modal.innerHTML='<button type=\"button\" class=\"gos-instagram-lightbox__close\" aria-label=\"閉じる\">×</button><div class=\"gos-instagram-lightbox__dialog\"><img class=\"gos-instagram-lightbox__image\" alt=\"\"><div class=\"gos-instagram-lightbox__caption\"></div><a class=\"gos-instagram-lightbox__instagram\" target=\"_blank\" rel=\"noopener noreferrer\">Instagramで開く</a></div>';"""
+          new_js="""            var labels=<?php echo wp_json_encode($lightbox_labels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;\n            var modal=null,lastFocused=null;\n            function ensure(){\n                if(modal)return modal;\n                modal=document.createElement('div');\n                modal.className='gos-instagram-lightbox';\n                modal.hidden=true;\n                modal.setAttribute('role','dialog');\n                modal.setAttribute('aria-modal','true');\n                modal.setAttribute('aria-label',labels.dialog);\n                modal.innerHTML='<button type=\"button\" class=\"gos-instagram-lightbox__close\">×</button><div class=\"gos-instagram-lightbox__dialog\"><img class=\"gos-instagram-lightbox__image\" alt=\"\"><div class=\"gos-instagram-lightbox__caption\"></div><a class=\"gos-instagram-lightbox__instagram\" target=\"_blank\" rel=\"noopener noreferrer\"></a></div>';\n                modal.querySelector('.gos-instagram-lightbox__close').setAttribute('aria-label',labels.close);\n                modal.querySelector('.gos-instagram-lightbox__instagram').textContent=labels.open;"""
+          if text.count(old_js)!=1: raise SystemExit('lightbox JS label boundary not found exactly once')
+          text=text.replace(old_js,new_js,1)
+          readme=readmes[0]
+          if not readme.startswith('開催情報・開催状況管理 3.2.76\n'): raise SystemExit('unexpected readme heading')
+          entry="開催情報・開催状況管理 3.2.77\n\n3.2.77:\n- Instagram画像拡大表示のUI文言をページ言語に対応\n- Englishでは英語、Chineseでは繁体字、日本語ページでは日本語を表示\n\n"
+          readme=entry+readme
+          for p in php_paths: p.write_text(text,encoding='utf-8')
+          for p in readme_paths: p.write_text(readme,encoding='utf-8')
+          PY
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          grep -q "Instagram image preview" garden-opening-status/garden-opening-status.php
+          grep -q "Instagram 圖片放大顯示" garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove workflow and commit
+        run: |
+          git rm .github/workflows/agent-instagram-lightbox-i18n-3277.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m "Localize Instagram lightbox labels in 3.2.77"
+          git push origin HEAD:feature/instagram-lightbox-i18n-3277
