@@ -2709,7 +2709,6 @@ final class Garden_Opening_Status_V3 {
 
     private static function instagram_defaults() {
         return [
-            'enabled' => 0,
             'auto_home' => 1,
             'access_token' => '',
             'ig_user_id' => '',
@@ -2794,7 +2793,6 @@ final class Garden_Opening_Status_V3 {
         if (!current_user_can('manage_options')) wp_die('権限がありません。');
         check_admin_referer('gos_instagram_save');
         $o = self::instagram_options();
-        $o['enabled'] = !empty($_POST['enabled']) ? 1 : 0;
         $o['auto_home'] = !empty($_POST['auto_home']) ? 1 : 0;
         $token = isset($_POST['access_token']) ? trim((string)wp_unslash($_POST['access_token'])) : '';
         if ($token !== '') $o['access_token'] = sanitize_text_field($token);
