@@ -2837,6 +2837,20 @@ final class Garden_Opening_Status_V3 {
         return $items;
     }
 
+    private static function request_instagram_media($options) {
+        $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
+        if ($options['ig_user_id'] !== '') {
+            $url = 'https://graph.facebook.com/' . rawurlencode($options['api_version']) . '/' . rawurlencode($options['ig_user_id']) . '/media';
+        } else {
+            $url = 'https://graph.instagram.com/' . rawurlencode($options['api_version']) . '/me/media';
+        }
+        $url = add_query_arg(['fields'=>$fields,'limit'=>max(12,(int)$options['limit'])], $url);
+        return wp_remote_get($url, [
+            'timeout' => 20,
+            'headers' => ['Authorization' => 'Bearer ' . $options['access_token']],
+        ]);
+    }
+
     public static function instagram_refresh() {
         $o = self::instagram_options();
         if (empty($o['access_token'])) {
@@ -2844,17 +2858,7 @@ final class Garden_Opening_Status_V3 {
             self::store_instagram_options($o);
             return false;
         }
-        $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
-        if ($o['ig_user_id'] !== '') {
-            $url = 'https://graph.facebook.com/' . rawurlencode($o['api_version']) . '/' . rawurlencode($o['ig_user_id']) . '/media';
-        } else {
-            $url = 'https://graph.instagram.com/' . rawurlencode($o['api_version']) . '/me/media';
-        }
-        $url = add_query_arg(['fields'=>$fields,'limit'=>max(12,(int)$o['limit'])], $url);
-        $response = wp_remote_get($url, [
-            'timeout' => 20,
-            'headers' => ['Authorization' => 'Bearer ' . $o['access_token']],
-        ]);
+        $response = self::request_instagram_media($o);
         if (is_wp_error($response)) {
             $o['last_error'] = $response->get_error_message();
             self::store_instagram_options($o);
