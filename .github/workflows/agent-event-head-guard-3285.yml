@@ -1,0 +1,34 @@
+name: Apply event head guard 3.2.85
+on:
+  push:
+    branches: [feature/event-head-guard-3285]
+    paths: ['.github/workflows/agent-event-head-guard-3285.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/event-head-guard-3285
+      - name: Apply patch
+        run: python3 .github/agent-patch-gos-3285.py
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.85' garden-opening-status/garden-opening-status.php
+          grep -F "例年の開苑期間は" garden-opening-status/garden-opening-status.php
+          grep -F "current_event_page_season() !== ''" garden-opening-status/garden-opening-status.php
+      - name: Commit patch and clean temporary files
+        run: |
+          rm -f .github/agent-patch-gos-3285.py .github/workflows/agent-event-head-guard-3285.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Guard unreleased event dates in page head for 3.2.85"
+          git push origin HEAD:feature/event-head-guard-3285
