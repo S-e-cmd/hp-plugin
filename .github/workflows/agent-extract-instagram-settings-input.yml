@@ -1,0 +1,84 @@
+name: Temporary guarded Instagram settings input extraction
+
+on:
+  push:
+    branches:
+      - agent/extract-instagram-settings-input
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded Instagram settings input extraction workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Instagram settings input handling
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+          old_lines = [
+              "        $o = self::instagram_options();",
+              "        $o['auto_home'] = !empty($_POST['auto_home']) ? 1 : 0;",
+              "        $token = isset($_POST['access_token']) ? trim((string)wp_unslash($_POST['access_token'])) : '';",
+              "        if ($token !== '') $o['access_token'] = sanitize_text_field($token);",
+              "        $o['ig_user_id'] = sanitize_text_field((string)($_POST['ig_user_id'] ?? ''));",
+              "        $version = sanitize_text_field((string)($_POST['api_version'] ?? 'v23.0'));",
+              "        $o['api_version'] = preg_match('/^v?\\d+\\.\\d+$/', $version) ? (strpos($version, 'v') === 0 ? $version : 'v'.$version) : 'v23.0';",
+              "        $o['limit'] = max(1, min(12, absint($_POST['limit'] ?? 6)));",
+              "        $o['heading'] = sanitize_text_field((string)($_POST['heading'] ?? 'Instagram'));",
+              "        $o['profile_url'] = esc_url_raw((string)($_POST['profile_url'] ?? ''));",
+          ]
+          old = '\n'.join(old_lines)
+          if text.count(old) != 1:
+              raise SystemExit(f'unexpected instagram save input block count: {text.count(old)}')
+          text = text.replace(old, "        $o = self::apply_instagram_settings_input(self::instagram_options(), $_POST);", 1)
+          anchor = "    public static function instagram_save() {\n"
+          helper_lines = [
+              "    private static function apply_instagram_settings_input($options, $input) {",
+              "        $options['auto_home'] = !empty($input['auto_home']) ? 1 : 0;",
+              "        $token = isset($input['access_token']) ? trim((string)wp_unslash($input['access_token'])) : '';",
+              "        if ($token !== '') $options['access_token'] = sanitize_text_field($token);",
+              "        $options['ig_user_id'] = sanitize_text_field((string)($input['ig_user_id'] ?? ''));",
+              "        $version = sanitize_text_field((string)($input['api_version'] ?? 'v23.0'));",
+              "        $options['api_version'] = preg_match('/^v?\\d+\\.\\d+$/', $version) ? (strpos($version, 'v') === 0 ? $version : 'v'.$version) : 'v23.0';",
+              "        $options['limit'] = max(1, min(12, absint($input['limit'] ?? 6)));",
+              "        $options['heading'] = sanitize_text_field((string)($input['heading'] ?? 'Instagram'));",
+              "        $options['profile_url'] = esc_url_raw((string)($input['profile_url'] ?? ''));",
+              "        return $options;",
+              "    }",
+              "",
+              "    public static function instagram_save() {",
+          ]
+          helper = '\n'.join(helper_lines) + '\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'unexpected instagram_save anchor count: {text.count(anchor)}')
+          text = text.replace(anchor, helper, 1)
+          if text.count('private static function apply_instagram_settings_input($options, $input)') != 1:
+              raise SystemExit('helper count mismatch')
+          if text.count('self::apply_instagram_settings_input(self::instagram_options(), $_POST);') != 1:
+              raise SystemExit('helper call mismatch')
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-extract-instagram-settings-input.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Extract Instagram settings input handling"
+          git push origin HEAD:agent/extract-instagram-settings-input
