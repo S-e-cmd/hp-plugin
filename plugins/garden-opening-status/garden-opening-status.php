@@ -65,19 +65,19 @@ final class Garden_Opening_Status_V3 {
         add_shortcode('garden_instagram_gallery', [__CLASS__, 'shortcode_instagram_gallery']);
     }
 
+    private static function information_page_language() {
+        if (is_page('english')) return 'en';
+        if (is_page('chinese')) return 'zh-Hant';
+        if (is_front_page()) return 'ja';
+        return '';
+    }
+
     /**
      * English / Traditional Chinese pages use the correct document language
      * without changing the site's global WordPress language setting.
      */
     public static function language_attributes($output, $doctype = 'html') {
-        $lang = '';
-        if (is_page('english')) {
-            $lang = 'en';
-        } elseif (is_page('chinese')) {
-            $lang = 'zh-Hant';
-        } elseif (is_front_page()) {
-            $lang = 'ja';
-        }
+        $lang = self::information_page_language();
 
         if ($lang === '') return $output;
 
@@ -94,7 +94,7 @@ final class Garden_Opening_Status_V3 {
      * tags, so the completed HTML is filtered to leave one language-appropriate set.
      */
     public static function start_description_output_buffer() {
-        if (is_admin() || (!is_front_page() && !is_page(['english', 'chinese']))) return;
+        if (is_admin() || self::information_page_language() === '') return;
         ob_start([__CLASS__, 'filter_description_output']);
     }
 
@@ -268,7 +268,7 @@ final class Garden_Opening_Status_V3 {
      * Canonical URLs remain managed by the existing SEO plugin.
      */
     public static function output_hreflang_links() {
-        if (!is_front_page() && !is_page(['english', 'chinese'])) return;
+        if (self::information_page_language() === '') return;
 
         $urls = [
             'ja' => home_url('/'),
@@ -294,18 +294,16 @@ final class Garden_Opening_Status_V3 {
      * change by event and will be represented separately by Event structured data.
      */
     public static function output_facility_structured_data() {
-        if (!is_front_page() && !is_page(['english', 'chinese'])) return;
+        if (self::information_page_language() === '') return;
 
-        $language = 'ja';
+        $language = self::information_page_language();
         $name = '上野東照宮ぼたん苑';
         $description = '上野東照宮の境内にある季節開苑の庭園。春と冬の牡丹、秋のダリアを展示しています。';
 
-        if (is_page('english')) {
-            $language = 'en';
+        if ($language === 'en') {
             $name = 'Ueno Toshogu Peony Garden';
             $description = 'A seasonal garden within the grounds of Ueno Toshogu Shrine, featuring peonies in spring and winter and dahlias in autumn.';
-        } elseif (is_page('chinese')) {
-            $language = 'zh-Hant';
+        } elseif ($language === 'zh-Hant') {
             $name = '上野東照宮牡丹園';
             $description = '位於上野東照宮境內的季節性庭園，春季與冬季展示牡丹，秋季展示大麗花。';
         }
