@@ -101,9 +101,10 @@ final class Garden_Opening_Status_V3 {
     public static function filter_description_output($html) {
         if (!is_string($html) || $html === '') return $html;
 
-        if (is_page('english')) {
+        $language = self::information_page_language();
+        if ($language === 'en') {
             $description = 'Ueno Toshogu Peony Garden in central Tokyo presents the Wintertime Peony Festival, Springtime Peony Festival, and Special Festival - Autumn Dahlia Garden.';
-        } elseif (is_page('chinese')) {
+        } elseif ($language === 'zh-Hant') {
             $description = '上野東照宮牡丹園位於東京都心，舉辦冬季牡丹園、春季牡丹節及特別祭典-秋季大麗花園，並提供參觀與交通資訊。';
         } else {
             $description = '上野東照宮の参道内にあるぼたん苑です。「上野・東照宮 冬ぼたん」、春のぼたん祭、ダリア綾なす秋の園を開催し、冬咲きぼたんや春の牡丹、秋のダリアをお楽しみいただけます。';
@@ -2289,8 +2290,8 @@ final class Garden_Opening_Status_V3 {
      * multilingual pages, without buffering or rewriting the whole response.
      */
     public static function multilingual_event_info_fallback() {
-        if (is_admin() || (!is_page('english') && !is_page('chinese'))) return;
-        $lang = is_page('chinese') ? 'zh-Hant' : 'en';
+        $lang = self::information_page_language();
+        if (is_admin() || !in_array($lang, ['en', 'zh-Hant'], true)) return;
         $rendered = [];
         foreach (self::event_keys() as $season) {
             $rendered[$season] = self::shortcode_event_info([
@@ -3234,8 +3235,9 @@ final class Garden_Opening_Status_V3 {
         $o = self::instagram_options();
         $html = self::shortcode_instagram_gallery(is_front_page() && !empty($o['auto_home']) ? ['limit' => 12] : []);
 
-        $auto_multilingual = is_page(['english', 'chinese']);
-        $multilingual_label = is_page('chinese') ? '在 Instagram 查看更多' : 'View more on Instagram';
+        $page_language = self::information_page_language();
+        $auto_multilingual = in_array($page_language, ['en', 'zh-Hant'], true);
+        $multilingual_label = $page_language === 'zh-Hant' ? '在 Instagram 查看更多' : 'View more on Instagram';
         $multilingual_html = $auto_multilingual
             ? self::shortcode_instagram_gallery([
                 'limit' => 12,
