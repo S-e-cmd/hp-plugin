@@ -2851,6 +2851,16 @@ final class Garden_Opening_Status_V3 {
         ]);
     }
 
+    private static function parse_instagram_media_response($response) {
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code < 200 || $code >= 300 || !is_array($body) || !isset($body['data'])) {
+            $msg = is_array($body) && !empty($body['error']['message']) ? $body['error']['message'] : 'HTTP ' . $code;
+            return ['data' => [], 'error' => sanitize_text_field($msg)];
+        }
+        return ['data' => $body['data'], 'error' => ''];
+    }
+
     public static function instagram_refresh() {
         $o = self::instagram_options();
         if (empty($o['access_token'])) {
@@ -2864,15 +2874,13 @@ final class Garden_Opening_Status_V3 {
             self::store_instagram_options($o);
             return false;
         }
-        $code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        if ($code < 200 || $code >= 300 || !is_array($body) || !isset($body['data'])) {
-            $msg = is_array($body) && !empty($body['error']['message']) ? $body['error']['message'] : 'HTTP ' . $code;
-            $o['last_error'] = sanitize_text_field($msg);
+        $parsed = self::parse_instagram_media_response($response);
+        if ($parsed['error'] !== '') {
+            $o['last_error'] = $parsed['error'];
             self::store_instagram_options($o);
             return false;
         }
-        $items = self::normalize_instagram_items($body['data']);
+        $items = self::normalize_instagram_items($parsed['data']);
         if (!$items) {
             $o['last_error'] = '表示できる投稿がありませんでした。';
             self::store_instagram_options($o);
