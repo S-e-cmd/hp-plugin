@@ -1,0 +1,23 @@
+name: Package garden opening status 3.2.80
+on:
+  push:
+    branches:
+      - artifact/gos-3280-zip
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version
+        run: |
+          grep -F "Version: 3.2.80" garden-opening-status/garden-opening-status.php
+          grep -F "const VERSION = '3.2.80';" garden-opening-status/garden-opening-status.php
+          php -l garden-opening-status/garden-opening-status.php
+      - name: Package plugin
+        run: zip -r garden-opening-status-v3.2.80.zip garden-opening-status
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.80
+          path: garden-opening-status-v3.2.80.zip
