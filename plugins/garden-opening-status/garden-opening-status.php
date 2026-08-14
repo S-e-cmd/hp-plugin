@@ -1134,6 +1134,14 @@ final class Garden_Opening_Status_V3 {
         return $price;
     }
 
+    private static function event_info_labels($event) {
+        return [
+            'date' => trim((string)($event['date_label'] ?? '')) ?: '開苑期間',
+            'time' => trim((string)($event['time_label'] ?? '')) ?: '開苑時間',
+            'price' => trim((string)($event['admission_label'] ?? '')) ?: '入苑料',
+        ];
+    }
+
     private static function event_page_output_values($season) {
         $options = self::options(false);
         $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
@@ -1150,12 +1158,13 @@ final class Garden_Opening_Status_V3 {
         $price_note = trim((string)($event['price_note'] ?? ''));
         if ($price_note !== '') $price .= ($price !== '' ? "\n" : '') . $price_note;
 
+        $labels = self::event_info_labels($event);
         return [
-            'date_label' => trim((string)($event['date_label'] ?? '開苑期間')) ?: '開苑期間',
+            'date_label' => $labels['date'],
             'date' => $date,
-            'time_label' => trim((string)($event['time_label'] ?? '開苑時間')) ?: '開苑時間',
+            'time_label' => $labels['time'],
             'time' => $time,
-            'price_label' => trim((string)($event['admission_label'] ?? '入苑料')) ?: '入苑料',
+            'price_label' => $labels['price'],
             'price' => $price,
         ];
     }
@@ -2370,11 +2379,7 @@ final class Garden_Opening_Status_V3 {
         $price_lines = self::localized_price_lines($price_details, $lang);
 
         $labels = [
-            'ja' => [
-                'date' => trim((string)($event['date_label'] ?? '')) ?: '開苑期間',
-                'time' => trim((string)($event['time_label'] ?? '')) ?: '開苑時間',
-                'price' => trim((string)($event['admission_label'] ?? '')) ?: '入苑料',
-            ],
+            'ja' => self::event_info_labels($event),
             'en' => ['date' => 'Opening period', 'time' => 'Opening hours', 'price' => 'Admission'],
             'zh-Hant' => ['date' => '開放期間', 'time' => '開放時間', 'price' => '入園費'],
         ];
