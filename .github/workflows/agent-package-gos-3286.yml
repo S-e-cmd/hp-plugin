@@ -1,0 +1,27 @@
+name: Package garden opening status 3.2.86
+on:
+  push:
+    branches: [artifact/gos-3286-wp-zip]
+    paths: ['.github/workflows/agent-package-gos-3286.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: artifact/gos-3286-wp-zip
+      - name: Validate plugin
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -F 'Version: 3.2.86' garden-opening-status/garden-opening-status.php
+          test -f garden-opening-status/assets/admin.css
+          test -f garden-opening-status/assets/admin.js
+      - name: Build plugin zip
+        run: zip -r garden-opening-status-v3.2.86.zip garden-opening-status -x '*.DS_Store'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.86
+          path: garden-opening-status-v3.2.86.zip
+          if-no-files-found: error
