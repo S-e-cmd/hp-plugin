@@ -21,8 +21,8 @@ jobs:
           cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
           cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
           git diff --check
-          grep -F "Version: 3.2.84" garden-opening-status/garden-opening-status.php
-          grep -F "event_released($event, self::now())" garden-opening-status/garden-opening-status.php
+          grep -F 'Version: 3.2.84' garden-opening-status/garden-opening-status.php
+          grep -F 'event_released($event, self::now())' garden-opening-status/garden-opening-status.php
       - name: Commit patch
         run: |
           git config user.name "github-actions[bot]"
