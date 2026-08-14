@@ -15,11 +15,13 @@ WordPressサイト向けの独自プラグインを管理するリポジトリ�
 ## ディレクトリ構成
 
 ```text
-plugins/
-├─ garden-opening-status/
-├─ universal-image-cropper/
-├─ mobile-layout-manager/
-└─ site-device-preview/
+├─ plugins/
+│  ├─ garden-opening-status/
+│  ├─ universal-image-cropper/
+│  ├─ mobile-layout-manager/
+│  └─ site-device-preview/
+├─ garden-opening-status/          # 開催情報プラグインの同期ミラー
+└─ archives/                       # 過去版の保管
 ```
 
 各プラグインは、WordPressの `wp-content/plugins/` にそのまま配置できるフォルダ構成で管理します。
