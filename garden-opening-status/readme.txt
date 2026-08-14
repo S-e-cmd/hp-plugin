@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.93
+
+3.2.93:
+- 常設案内として運用している /news/notice/ の表示本文を変更せず、title / descriptionを「入苑案内・料金・支払い・撮影・注意事項」文脈へ調整
+- /news/notice/ のOG / Twitter / AIOSEO WebPage・Article系schemaを同じtitle / descriptionへ同期
+- /news/notice/ の旧テーマOGを除去しAIOSEOをheadメタ情報の正本に統一
+- 記事の日付・著者等の既存schema情報、会期・日付連動、トップ、アクセス、会期一覧、春・秋・冬、英語・繁体字、本文・見出し・レイアウトには変更なし
+
 開催情報・開催状況管理 3.2.92
 
 3.2.92:
