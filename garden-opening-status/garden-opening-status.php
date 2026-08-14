@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.81
+ * Version: 3.2.82
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.81';
+    const VERSION = '3.2.82';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -31,6 +31,7 @@ final class Garden_Opening_Status_V3 {
         add_filter('wp_is_mobile', [__CLASS__, 'force_mobile_preview']);
         add_filter('body_class', [__CLASS__, 'body_class']);
         add_filter('language_attributes', [__CLASS__, 'language_attributes'], 20, 2);
+        add_action('template_redirect', [__CLASS__, 'start_multilingual_theme_og_output_buffer'], -110);
         add_action('template_redirect', [__CLASS__, 'start_description_output_buffer'], -100);
         add_action('template_redirect', [__CLASS__, 'start_permanent_guide_output_buffer'], -90);
         add_action('pre_get_posts', [__CLASS__, 'exclude_permanent_guide_from_news_queries'], 20);
@@ -97,6 +98,39 @@ final class Garden_Opening_Status_V3 {
         }
 
         return trim($output . ' lang="' . esc_attr($lang) . '"');
+    }
+
+    /**
+     * On English / Traditional Chinese pages, the legacy theme emits its own OG
+     * tags before AIOSEO. Remove only those pre-AIOSEO OG tags so AIOSEO remains
+     * the single source of Open Graph metadata. No tags are reinserted here.
+     */
+    public static function start_multilingual_theme_og_output_buffer() {
+        if (is_admin()) return;
+        $language = self::information_page_language();
+        if ($language !== 'en' && $language !== 'zh-Hant') return;
+        ob_start([__CLASS__, 'filter_multilingual_theme_og_output']);
+    }
+
+    public static function filter_multilingual_theme_og_output($html) {
+        if (!is_string($html) || $html === '') return $html;
+
+        $language = self::information_page_language();
+        if ($language !== 'en' && $language !== 'zh-Hant') return $html;
+
+        $aioseo_marker = '<!-- All in One SEO';
+        $marker_pos = stripos($html, $aioseo_marker);
+        if ($marker_pos === false) return $html;
+
+        $before = substr($html, 0, $marker_pos);
+        $after = substr($html, $marker_pos);
+        if (!is_string($before) || !is_string($after)) return $html;
+
+        $pattern = '~<meta\\b(?=[^>]*\\bproperty\\s*=\\s*(["\\\'])og:(?:type|url|title|description|site_name|image(?::(?:secure_url|width|height))?)\\1)[^>]*>\\s*~i';
+        $before = preg_replace($pattern, '', $before);
+        if (!is_string($before)) return $html;
+
+        return $before . $after;
     }
 
     private static function multilingual_seo_config($language) {
@@ -179,7 +213,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.81 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.82 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
