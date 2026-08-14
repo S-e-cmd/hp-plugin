@@ -1128,6 +1128,11 @@ final class Garden_Opening_Status_V3 {
         ob_start([__CLASS__, 'filter_event_page_output']);
     }
 
+    private static function event_price_details($event) {
+        $price = self::event_price_details($event);
+        return $price;
+    }
+
     private static function event_page_output_values($season) {
         $options = self::options(false);
         $event = is_array($options['events'][$season] ?? null) ? $options['events'][$season] : [];
@@ -1140,8 +1145,7 @@ final class Garden_Opening_Status_V3 {
         $close_label = trim((string)($event['close_time_label'] ?? ''));
         if ($time !== '' && $close_label !== '') $time .= '（' . $close_label . '）';
 
-        $price = trim((string)($event['price_details'] ?? ''));
-        if ($price === '') $price = trim((string)($event['price'] ?? ''));
+        $price = self::event_price_details($event);
         $price_note = trim((string)($event['price_note'] ?? ''));
         if ($price_note !== '') $price .= ($price !== '' ? "\n" : '') . $price_note;
 
@@ -2361,8 +2365,7 @@ final class Garden_Opening_Status_V3 {
             else $time_text .= '（' . $close_label . '）';
         }
 
-        $price_details = trim((string)($event['price_details'] ?? ''));
-        if ($price_details === '') $price_details = trim((string)($event['price'] ?? ''));
+        $price_details = self::event_price_details($event);
         $price_lines = self::localized_price_lines($price_details, $lang);
 
         $labels = [
