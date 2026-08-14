@@ -1865,6 +1865,9 @@ final class Garden_Opening_Status_V3 {
     }
 
     private static function runtime_context() {
+        static $context = null;
+        if ($context !== null) return $context;
+
         $o = self::options();
         $forced_state = '';
         $forced_event = '';
@@ -1875,7 +1878,8 @@ final class Garden_Opening_Status_V3 {
             if (in_array($candidate_event, self::event_keys(), true)) $forced_event = $candidate_event;
         }
         $model = self::view_model($o, $forced_state, $forced_event);
-        return [$o, $model];
+        $context = [$o, $model];
+        return $context;
     }
 
     private static function should_render() {
