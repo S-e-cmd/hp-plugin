@@ -1,0 +1,33 @@
+name: Apply contact page SEO 3.2.94
+on:
+  push:
+    branches: [feature/contact-page-seo-3294]
+    paths: ['.github/workflows/agent-contact-seo-3294.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/contact-page-seo-3294
+      - name: Apply patch
+        run: python3 .github/agent-contact-3294.py
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.94' garden-opening-status/garden-opening-status.php
+          grep -F '上野東照宮ぼたん苑へのお問い合わせ｜入苑・取材・各種ご相談' garden-opening-status/garden-opening-status.php
+          grep -F "is_page('contact')" garden-opening-status/garden-opening-status.php
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m 'Optimize contact page SEO metadata in 3.2.94'
+          git push origin HEAD:feature/contact-page-seo-3294
