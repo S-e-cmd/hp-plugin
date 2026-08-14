@@ -98,9 +98,6 @@
 .gos3-preview-context[hidden]{display:none!important}
 .gos3-preview-actions[hidden],.gos3-preview-frame[hidden],.gos3-overview-preview[hidden],.gos3-direct-editor[hidden],[data-preview-tools][hidden],[data-preview-context][hidden]{display:none!important}
 
-.gos-admin-intro{margin:6px 0 18px;font-size:14px}
-.gos-section-title,.gos-card>h2,.gos-panel>h2{scroll-margin-top:48px}
-
 @media(max-width:1180px){
   .gos3-grid{grid-template-columns:1fr}
   .gos3-preview-card{position:static;max-height:none;overflow:visible}
