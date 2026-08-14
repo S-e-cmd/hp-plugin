@@ -2118,8 +2118,7 @@ final class Garden_Opening_Status_V3 {
             $rows[] = [($event['time_label'] ?: '開苑時間'), $time];
         }
 
-        $details = trim((string)($event['price_details'] ?? ''));
-        if ($details === '') $details = trim((string)($event['price'] ?? ''));
+        $details = self::event_price_details($event);
         if ($details !== '') {
             $lines = preg_split('/\r\n|\r|\n/', $details);
             $html = '';
