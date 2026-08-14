@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.80
+
+3.2.80:
+- AIOSEO公式の aioseo_title / aioseo_facebook_tags / aioseo_twitter_tags を使い、English / Chinese のSEO・SNSメタを直接補正
+- AIOSEO schema補正は既存の aioseo_schema_output を継続
+- source上で実稼働版を確認できる multilingual SEO active コメントを追加
+- canonical、hreflang、既存TouristAttraction schemaは変更なし
+
 開催情報・開催状況管理 3.2.79
 
 3.2.79:
