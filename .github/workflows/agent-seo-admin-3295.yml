@@ -26,7 +26,7 @@ jobs:
           grep -F 'Peonies, Dahlias & Seasonal Flowers in Tokyo' garden-opening-status/garden-opening-status.php
           grep -F '東京上野賞牡丹、大麗花與四季花卉' garden-opening-status/garden-opening-status.php
           grep -F "'seo' => self::seo_defaults()" garden-opening-status/garden-opening-status.php
-          grep -F "self::seo_value($season, 'confirmed_title')" garden-opening-status/garden-opening-status.php
+          grep -F 'self::seo_value($season, '\''confirmed_title'\'')' garden-opening-status/garden-opening-status.php
       - name: Commit patch
         run: |
           git config user.name 'github-actions[bot]'
