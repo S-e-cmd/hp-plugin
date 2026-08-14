@@ -1,0 +1,23 @@
+name: Package garden opening status 3.2.82
+on:
+  push:
+    branches: [artifact/gos-3282-wp-zip]
+jobs:
+  package:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: artifact/gos-3282-wp-zip
+      - name: Validate plugin
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -q "Version: 3.2.82" garden-opening-status/garden-opening-status.php
+      - name: Build WordPress plugin ZIP
+        run: zip -qr garden-opening-status-v3.2.82.zip garden-opening-status
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.82
+          path: garden-opening-status-v3.2.82.zip
