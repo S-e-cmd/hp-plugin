@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'Fix guarded Instagram enabled cleanup workflow'
+    if: github.event.head_commit.message == 'Narrow Instagram enabled cleanup assertions'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,24 +24,34 @@ jobs:
           if texts[0] != texts[1]:
               raise SystemExit('duplicate PHP copies differ before cleanup')
           text = texts[0]
-          start = text.index('    private static function instagram_defaults() {')
-          end = text.index('    private static function instagram_options() {', start)
-          block = text[start:end]
+
+          defaults_start = text.index('    private static function instagram_defaults() {')
+          defaults_end = text.index('    private static function instagram_options() {', defaults_start)
+          defaults_block = text[defaults_start:defaults_end]
           default_line = "            'enabled' => 0,\n"
+          if defaults_block.count(default_line) != 1:
+              raise SystemExit(f'unexpected Instagram enabled default count: {defaults_block.count(default_line)}')
+          defaults_block = defaults_block.replace(default_line, '', 1)
+          text = text[:defaults_start] + defaults_block + text[defaults_end:]
+
+          save_start = text.index('    public static function instagram_save() {')
+          save_end = text.index('    public static function instagram_refresh_action() {', save_start)
+          save_block = text[save_start:save_end]
           save_line = "        $o['enabled'] = !empty($_POST['enabled']) ? 1 : 0;\n"
-          if block.count(default_line) != 1:
-              raise SystemExit(f'unexpected Instagram enabled default count: {block.count(default_line)}')
-          if text.count(save_line) != 1:
-              raise SystemExit(f'unexpected Instagram enabled save count: {text.count(save_line)}')
-          block = block.replace(default_line, '', 1)
-          text = text[:start] + block + text[end:]
-          text = text.replace(save_line, '', 1)
-          new_start = text.index('    private static function instagram_defaults() {')
-          new_end = text.index('    private static function instagram_options() {', new_start)
-          if "'enabled'" in text[new_start:new_end]:
+          if save_block.count(save_line) != 1:
+              raise SystemExit(f'unexpected Instagram enabled save count: {save_block.count(save_line)}')
+          save_block = save_block.replace(save_line, '', 1)
+          text = text[:save_start] + save_block + text[save_end:]
+
+          new_defaults_start = text.index('    private static function instagram_defaults() {')
+          new_defaults_end = text.index('    private static function instagram_options() {', new_defaults_start)
+          new_save_start = text.index('    public static function instagram_save() {')
+          new_save_end = text.index('    public static function instagram_refresh_action() {', new_save_start)
+          if "'enabled'" in text[new_defaults_start:new_defaults_end]:
               raise SystemExit('Instagram enabled default remains')
-          if "$o['enabled']" in text:
+          if "$o['enabled']" in text[new_save_start:new_save_end]:
               raise SystemExit('Instagram enabled save remains')
+
           for p in paths:
               p.write_text(text, encoding='utf-8')
           PY
