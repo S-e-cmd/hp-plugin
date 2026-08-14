@@ -1,0 +1,48 @@
+name: Temporary guarded preview CSS restore
+
+on:
+  push:
+    branches:
+      - agent/restore-event-info-preview-css
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.event.head_commit.message == 'Add guarded preview CSS restore workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact preview rules
+        shell: python
+        run: |
+          from pathlib import Path
+          paths=[Path('garden-opening-status/assets/admin.css'),Path('plugins/garden-opening-status/assets/admin.css')]
+          texts=[p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]: raise SystemExit('CSS copies differ before restore')
+          text=texts[0]
+          if '.gos3-event-info-preview{' in text: raise SystemExit('preview CSS already present')
+          anchor='.gos3-event-overview-fields h3{margin:0 0 6px}\n'
+          if text.count(anchor) != 1: raise SystemExit('anchor count is not 1')
+          block=(
+            '.gos3-event-info-preview{margin-top:14px;padding:14px;background:#fff;border:1px solid #dcdcde}\n'
+            '.gos3-event-info-preview>.gos-event-info{margin:10px 0 0}\n'
+            '.gos3-event-info-preview .gos-event-info__heading{font-size:18px}\n'
+            '.gos3-event-info-preview .gos-event-info__row{grid-template-columns:7em 1fr}\n'
+          )
+          text=text.replace(anchor,anchor+block,1)
+          for p in paths: p.write_text(text,encoding='utf-8')
+      - name: Verify exact restore
+        run: |
+          cmp garden-opening-status/assets/admin.css plugins/garden-opening-status/assets/admin.css
+          git diff --check
+          test "$(grep -c '^\.gos3-event-info-preview' garden-opening-status/assets/admin.css)" -eq 4
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-restore-preview-css.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/assets/admin.css plugins/garden-opening-status/assets/admin.css
+          git commit -m "Restore event info preview styling"
+          git push origin HEAD:agent/restore-event-info-preview-css
