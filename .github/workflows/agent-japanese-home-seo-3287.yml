@@ -24,7 +24,7 @@ jobs:
           grep -F 'Version: 3.2.87' garden-opening-status/garden-opening-status.php
           grep -F '東京・上野の日本庭園｜季節の花を楽しむ上野東照宮ぼたん苑' garden-opening-status/garden-opening-status.php
           grep -F 'filter_aioseo_japanese_home_schema' garden-opening-status/garden-opening-status.php
-          grep -F "if ($language === '' || $language === 'ja' || $language === 'en' || $language === 'zh-Hant') return;" garden-opening-status/garden-opening-status.php
+          grep -F "'description' => '東京・上野公園にある上野東照宮ぼたん苑。回遊形式の日本庭園で、春と冬の牡丹、秋のダリアなど季節の花を楽しめます。上野観光・東京の庭園散策にもおすすめです。'" garden-opening-status/garden-opening-status.php
       - name: Commit patch
         run: |
           git config user.name "github-actions[bot]"
