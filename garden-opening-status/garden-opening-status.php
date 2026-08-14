@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.82
+ * Version: 3.2.83
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.82';
+    const VERSION = '3.2.83';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -39,6 +39,8 @@ final class Garden_Opening_Status_V3 {
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_multilingual_title'], 100);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_multilingual_description'], 100);
+        add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_event_page_title'], 110);
+        add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_event_page_description'], 110);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
         add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
@@ -178,6 +180,60 @@ final class Garden_Opening_Status_V3 {
         return $localized !== '' ? $localized : $description;
     }
 
+    /**
+     * Keep the permanent seasonal page as the SEO source of truth once confirmed
+     * dates are publicly released. Before release, leave the page's existing
+     * evergreen AIOSEO title/description untouched.
+     */
+    private static function confirmed_event_page_seo_data() {
+        $season = self::current_event_page_season();
+        if ($season === '') return [];
+
+        $options = self::options(false);
+        $event = self::event_from_options($options, $season);
+        if (empty($event['enabled'])) return [];
+
+        $now = self::now();
+        if (!self::event_released($event, $now)) return [];
+
+        $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
+        if ($date_display_mode !== 'confirmed') return [];
+
+        $start_date = trim((string)($event['start'] ?? ''));
+        $end_date = trim((string)($event['end'] ?? ''));
+        if ($start_date === '' || $end_date === '') return [];
+
+        $start = self::dt($start_date, '00:00');
+        $end = self::dt($end_date, '23:59');
+        if (!$start || !$end || $end < $start) return [];
+
+        $name = trim((string)($event['label'] ?? ''));
+        if ($name === '') return [];
+
+        if ($start->format('Y') === $end->format('Y')) {
+            $range = $start->format('Y年n月j日') . '～' . $end->format('n月j日');
+            $description = $start->format('Y年') . 'の' . $name . 'は' . $start->format('n月j日') . 'から' . $end->format('n月j日') . 'まで開催します。';
+        } else {
+            $range = $start->format('Y年n月j日') . '～' . $end->format('Y年n月j日');
+            $description = $name . 'は' . $start->format('Y年n月j日') . 'から' . $end->format('Y年n月j日') . 'まで開催します。';
+        }
+
+        return [
+            'title' => $name . '｜' . $range . '｜上野東照宮ぼたん苑',
+            'description' => $description . '開苑時間、入苑料、アクセスなどをご案内します。',
+        ];
+    }
+
+    public static function filter_aioseo_event_page_title($title) {
+        $seo = self::confirmed_event_page_seo_data();
+        return !empty($seo['title']) ? $seo['title'] : $title;
+    }
+
+    public static function filter_aioseo_event_page_description($description) {
+        $seo = self::confirmed_event_page_seo_data();
+        return !empty($seo['description']) ? $seo['description'] : $description;
+    }
+
     public static function filter_aioseo_multilingual_facebook_tags($tags) {
         $language = self::information_page_language();
         $seo = self::multilingual_seo_config($language);
@@ -213,7 +269,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.82 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.83 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
