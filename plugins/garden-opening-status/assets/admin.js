@@ -657,28 +657,3 @@ document.addEventListener('DOMContentLoaded',function(){
   setPreviewTarget('status');
 });
 })();
-
-
-
-
-(function(){
-  let timer = null;
-  function isTextEditor(el){
-    if(!el) return false;
-    const tag=(el.tagName||'').toLowerCase();
-    if(tag==='textarea') return true;
-    if(tag!=='input') return false;
-    const type=(el.type||'text').toLowerCase();
-    return ['text','number','url','email','search','tel'].includes(type);
-  }
-  document.addEventListener('input', function(e){
-    if(!isTextEditor(e.target)) return;
-    const preview=document.getElementById('gos3-preview-frame');
-    if(!preview) return;
-    clearTimeout(timer);
-    timer=setTimeout(function(){
-      const btn=document.querySelector('[data-gos-preview-reload], #gos3-preview-reload, .gos3-preview-reload');
-      if(btn) btn.click();
-    }, 1000);
-  }, true);
-})();
