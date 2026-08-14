@@ -1864,6 +1864,10 @@ final class Garden_Opening_Status_V3 {
         <?php return trim(ob_get_clean());
     }
 
+    private static function is_status_preview() {
+        return current_user_can('manage_options') && !empty($_GET['garden_status_preview']);
+    }
+
     private static function runtime_context() {
         static $context = null;
         if ($context !== null) return $context;
@@ -1871,7 +1875,7 @@ final class Garden_Opening_Status_V3 {
         $o = self::options();
         $forced_state = '';
         $forced_event = '';
-        if (current_user_can('manage_options') && !empty($_GET['garden_status_preview'])) {
+        if (self::is_status_preview()) {
             $candidate = sanitize_key($_GET['gos_force_state'] ?? '');
             if (in_array($candidate, self::state_keys(), true)) $forced_state = $candidate;
             $candidate_event = sanitize_key($_GET['gos_force_event'] ?? '');
@@ -1885,7 +1889,7 @@ final class Garden_Opening_Status_V3 {
     private static function should_render() {
         if (!is_front_page()) return false;
         [$o] = self::runtime_context();
-        return !empty($o['enabled']) || (current_user_can('manage_options') && !empty($_GET['garden_status_preview']));
+        return !empty($o['enabled']) || (self::is_status_preview());
     }
 
     public static function boot_hide() {
@@ -1997,7 +2001,7 @@ final class Garden_Opening_Status_V3 {
         if (!self::should_render()) return;
         [$o, $model] = self::runtime_context();
         $forced_device = sanitize_key($_GET['gos_preview_device'] ?? '');
-        $render_device = (current_user_can('manage_options') && !empty($_GET['garden_status_preview']) && in_array($forced_device,['desktop','mobile'],true)) ? $forced_device : (wp_is_mobile()?'mobile':'desktop');
+        $render_device = (self::is_status_preview() && in_array($forced_device,['desktop','mobile'],true)) ? $forced_device : (wp_is_mobile()?'mobile':'desktop');
         $html = self::panel_html($o,$model);
         ?>
         <script id="gos3-script">
