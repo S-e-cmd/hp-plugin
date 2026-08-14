@@ -57,6 +57,10 @@ final class Garden_Opening_Status_V3 {
         add_shortcode('garden_event', [__CLASS__, 'shortcode_event']);
         add_shortcode('garden_event_info', [__CLASS__, 'shortcode_event_info']);
         add_shortcode('garden_event_overview', [__CLASS__, 'shortcode_event_info']);
+        self::register_instagram_hooks();
+    }
+
+    private static function register_instagram_hooks() {
         add_action('admin_menu', [__CLASS__, 'instagram_admin_menu']);
         add_action('admin_post_gos_instagram_save', [__CLASS__, 'instagram_save']);
         add_action('admin_post_gos_instagram_refresh', [__CLASS__, 'instagram_refresh_action']);
