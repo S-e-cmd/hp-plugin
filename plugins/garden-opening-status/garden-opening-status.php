@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.79
+ * Version: 3.2.80
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.79';
+    const VERSION = '3.2.80';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -36,6 +36,10 @@ final class Garden_Opening_Status_V3 {
         add_action('pre_get_posts', [__CLASS__, 'exclude_permanent_guide_from_news_queries'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
+        add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_multilingual_title'], 100);
+        add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
+        add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
+        add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
         add_action('wp_head', [__CLASS__, 'output_hreflang_links'], 5);
         add_action('wp_head', [__CLASS__, 'output_facility_structured_data'], 6);
         add_action('wp_head', [__CLASS__, 'output_event_structured_data'], 7);
@@ -118,6 +122,59 @@ final class Garden_Opening_Status_V3 {
         return [];
     }
 
+    private static function multilingual_page_description($language) {
+        if ($language === 'en') {
+            return 'Ueno Toshogu Peony Garden in central Tokyo presents the Wintertime Peony Festival, Springtime Peony Festival, and Special Festival - Autumn Dahlia Garden.';
+        }
+        if ($language === 'zh-Hant') {
+            return '上野東照宮牡丹園位於東京都心，舉辦冬季牡丹園、春季牡丹節及特別祭典-秋季大麗花園，並提供參觀與交通資訊。';
+        }
+        return '';
+    }
+
+    public static function filter_aioseo_multilingual_title($title) {
+        $seo = self::multilingual_seo_config(self::information_page_language());
+        return $seo ? $seo['title'] : $title;
+    }
+
+    public static function filter_aioseo_multilingual_facebook_tags($tags) {
+        $language = self::information_page_language();
+        $seo = self::multilingual_seo_config($language);
+        if (!$seo || !is_array($tags)) return $tags;
+
+        $image_url = home_url('/wp-content/uploads/2021/03/main1_sp.png');
+        $description = self::multilingual_page_description($language);
+        $tags['og:locale'] = $seo['og_locale'];
+        $tags['og:type'] = 'article';
+        $tags['og:url'] = home_url($seo['path']);
+        $tags['og:title'] = $seo['title'];
+        $tags['og:site_name'] = $seo['site_name'];
+        $tags['og:image'] = $image_url;
+        $tags['og:image:secure_url'] = $image_url;
+        $tags['og:image:width'] = '1450';
+        $tags['og:image:height'] = '860';
+        if ($description !== '') $tags['og:description'] = $description;
+        return $tags;
+    }
+
+    public static function filter_aioseo_multilingual_twitter_tags($tags) {
+        $language = self::information_page_language();
+        $seo = self::multilingual_seo_config($language);
+        if (!$seo || !is_array($tags)) return $tags;
+
+        $tags['twitter:title'] = $seo['title'];
+        $tags['twitter:image'] = home_url('/wp-content/uploads/2021/03/main1_sp.png');
+        $description = self::multilingual_page_description($language);
+        if ($description !== '') $tags['twitter:description'] = $description;
+        return $tags;
+    }
+
+    public static function output_multilingual_seo_marker() {
+        $language = self::information_page_language();
+        if ($language !== 'en' && $language !== 'zh-Hant') return;
+        echo "<!-- Garden Opening Status 3.2.80 multilingual SEO active -->\n";
+    }
+
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
         if (!is_array($node)) return;
 
@@ -181,10 +238,8 @@ final class Garden_Opening_Status_V3 {
         if (!is_string($html) || $html === '') return $html;
 
         $language = self::information_page_language();
-        if ($language === 'en') {
-            $description = 'Ueno Toshogu Peony Garden in central Tokyo presents the Wintertime Peony Festival, Springtime Peony Festival, and Special Festival - Autumn Dahlia Garden.';
-        } elseif ($language === 'zh-Hant') {
-            $description = '上野東照宮牡丹園位於東京都心，舉辦冬季牡丹園、春季牡丹節及特別祭典-秋季大麗花園，並提供參觀與交通資訊。';
+        if ($language === 'en' || $language === 'zh-Hant') {
+            $description = self::multilingual_page_description($language);
         } else {
             $description = '上野東照宮の参道内にあるぼたん苑です。「上野・東照宮 冬ぼたん」、春のぼたん祭、ダリア綾なす秋の園を開催し、冬咲きぼたんや春の牡丹、秋のダリアをお楽しみいただけます。';
         }
