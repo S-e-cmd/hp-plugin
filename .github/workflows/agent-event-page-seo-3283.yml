@@ -4,6 +4,7 @@ on:
     branches:
       - feature/event-page-seo-3283
     paths:
+      - .github/workflows/agent-event-page-seo-3283.yml
       - .github/scripts/patch-event-page-seo-3283.py
 permissions:
   contents: write
