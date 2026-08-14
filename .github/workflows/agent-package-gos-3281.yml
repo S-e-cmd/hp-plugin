@@ -1,0 +1,29 @@
+name: Package garden opening status 3.2.81
+on:
+  push:
+    branches: [artifact/gos-3281-wp-zip]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: artifact/gos-3281-wp-zip
+      - name: Validate plugin
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -F "Version: 3.2.81" garden-opening-status/garden-opening-status.php
+          grep -F "Plugin Name: 開催情報・開催状況管理" garden-opening-status/garden-opening-status.php
+      - name: Build WordPress plugin ZIP
+        run: |
+          rm -f garden-opening-status-v3.2.81.zip
+          zip -r garden-opening-status-v3.2.81.zip garden-opening-status -x '*.DS_Store'
+          unzip -l garden-opening-status-v3.2.81.zip
+          unzip -p garden-opening-status-v3.2.81.zip garden-opening-status/garden-opening-status.php | head -n 12
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.81
+          path: garden-opening-status-v3.2.81.zip
+          if-no-files-found: error
