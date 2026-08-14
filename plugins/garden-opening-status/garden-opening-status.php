@@ -2818,6 +2818,25 @@ final class Garden_Opening_Status_V3 {
         exit;
     }
 
+    private static function normalize_instagram_items($data) {
+        $items = [];
+        foreach ((array)$data as $item) {
+            if (!is_array($item) || empty($item['permalink'])) continue;
+            $image = ($item['media_type'] ?? '') === 'VIDEO' ? ($item['thumbnail_url'] ?? '') : ($item['media_url'] ?? '');
+            if ($image === '') continue;
+            $items[] = [
+                'id' => sanitize_text_field((string)($item['id'] ?? '')),
+                'caption' => sanitize_textarea_field((string)($item['caption'] ?? '')),
+                'media_type' => sanitize_key((string)($item['media_type'] ?? 'IMAGE')),
+                'image_url' => esc_url_raw($image),
+                'permalink' => esc_url_raw((string)$item['permalink']),
+                'timestamp' => sanitize_text_field((string)($item['timestamp'] ?? '')),
+            ];
+            if (count($items) >= 12) break;
+        }
+        return $items;
+    }
+
     public static function instagram_refresh() {
         $o = self::instagram_options();
         if (empty($o['access_token'])) {
@@ -2849,21 +2868,7 @@ final class Garden_Opening_Status_V3 {
             self::store_instagram_options($o);
             return false;
         }
-        $items = [];
-        foreach ((array)$body['data'] as $item) {
-            if (!is_array($item) || empty($item['permalink'])) continue;
-            $image = ($item['media_type'] ?? '') === 'VIDEO' ? ($item['thumbnail_url'] ?? '') : ($item['media_url'] ?? '');
-            if ($image === '') continue;
-            $items[] = [
-                'id' => sanitize_text_field((string)($item['id'] ?? '')),
-                'caption' => sanitize_textarea_field((string)($item['caption'] ?? '')),
-                'media_type' => sanitize_key((string)($item['media_type'] ?? 'IMAGE')),
-                'image_url' => esc_url_raw($image),
-                'permalink' => esc_url_raw((string)$item['permalink']),
-                'timestamp' => sanitize_text_field((string)($item['timestamp'] ?? '')),
-            ];
-            if (count($items) >= 12) break;
-        }
+        $items = self::normalize_instagram_items($body['data']);
         if (!$items) {
             $o['last_error'] = '表示できる投稿がありませんでした。';
             self::store_instagram_options($o);
