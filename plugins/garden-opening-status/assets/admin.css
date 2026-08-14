@@ -66,6 +66,10 @@
 
 .gos3-event-overview-fields{margin-top:8px;padding:16px;border:1px solid #dcdcde;border-radius:6px;background:#f9f9f9}
 .gos3-event-overview-fields h3{margin:0 0 6px}
+.gos3-event-info-preview{margin-top:14px;padding:14px;background:#fff;border:1px solid #dcdcde}
+.gos3-event-info-preview>.gos-event-info{margin:10px 0 0}
+.gos3-event-info-preview .gos-event-info__heading{font-size:18px}
+.gos3-event-info-preview .gos-event-info__row{grid-template-columns:7em 1fr}
 
 .gos3-overview-preview{margin:auto;border:1px solid #aaa;background:#e9e9e9;overflow:auto;box-sizing:border-box;transition:width .2s,height .2s}
 .gos3-overview-preview.desktop{width:100%;height:clamp(360px,calc(100vh - 300px),650px)}
