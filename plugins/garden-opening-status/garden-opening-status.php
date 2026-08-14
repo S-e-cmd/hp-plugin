@@ -618,6 +618,14 @@ final class Garden_Opening_Status_V3 {
         return ['spring', 'autumn', 'winter'];
     }
 
+    private static function is_event_key($key) {
+        return in_array($key, self::event_keys(), true);
+    }
+
+    private static function is_state_key($key) {
+        return in_array($key, self::state_keys(), true);
+    }
+
     private static function default_device_design($device = 'desktop') {
         $mobile = $device === 'mobile';
         return [
@@ -1373,8 +1381,8 @@ final class Garden_Opening_Status_V3 {
         $allowed_next = array_merge(['auto', 'none'], self::event_keys());
         $out['next_mode'] = in_array(($input['next_mode'] ?? 'auto'), $allowed_next, true) ? $input['next_mode'] : 'auto';
         $out['state_mode'] = in_array(($input['state_mode'] ?? 'manual'), ['auto','manual'], true) ? $input['state_mode'] : 'manual';
-        $out['manual_state'] = in_array(($input['manual_state'] ?? 'closed'), self::state_keys(), true) ? $input['manual_state'] : 'closed';
-        $out['manual_event'] = in_array(($input['manual_event'] ?? 'spring'), self::event_keys(), true) ? $input['manual_event'] : 'spring';
+        $out['manual_state'] = self::is_state_key(($input['manual_state'] ?? 'closed')) ? $input['manual_state'] : 'closed';
+        $out['manual_event'] = self::is_event_key(($input['manual_event'] ?? 'spring')) ? $input['manual_event'] : 'spring';
         $out['temporary_closed_date'] = self::clean_date($input['temporary_closed_date'] ?? '');
         $out['access_url'] = esc_url_raw($input['access_url'] ?? '');
         $out['detail_button'] = sanitize_text_field($input['detail_button'] ?? '');
@@ -1571,9 +1579,9 @@ final class Garden_Opening_Status_V3 {
         $clean = self::sanitize_payload(wp_unslash($_POST));
         set_transient(self::preview_key($token), $clean, 30 * MINUTE_IN_SECONDS);
         $state = sanitize_key($_POST['preview_state'] ?? '');
-        if (!in_array($state, self::state_keys(), true)) $state = $clean['state_mode'] === 'manual' ? $clean['manual_state'] : '';
+        if (!self::is_state_key($state)) $state = $clean['state_mode'] === 'manual' ? $clean['manual_state'] : '';
         $event = sanitize_key($_POST['preview_event'] ?? 'spring');
-        if (!in_array($event, self::event_keys(), true)) $event = 'spring';
+        if (!self::is_event_key($event)) $event = 'spring';
         $device = sanitize_key($_POST['preview_device'] ?? 'desktop');
         if (!in_array($device, ['desktop','mobile'], true)) $device = 'desktop';
         if (sanitize_key($_POST['preview_mode'] ?? '') === 'mobile_shell') {
@@ -1612,7 +1620,7 @@ final class Garden_Opening_Status_V3 {
         if (!current_user_can('manage_options') || empty($_GET['gos_event_info_preview'])) return '';
         $token = sanitize_key($_GET['gos_preview_token'] ?? '');
         $season = sanitize_key($_GET['gos_event_info_preview'] ?? '');
-        if (!$token || !in_array($season, self::event_keys(), true)) return '';
+        if (!$token || !self::is_event_key($season)) return '';
         $preview = get_transient(self::preview_key($token));
         if (!is_array($preview)) return '';
         $o = self::normalize($preview);
@@ -1731,7 +1739,7 @@ final class Garden_Opening_Status_V3 {
 
     private static function choose_next_event($o, $future, $past) {
         if ($o['next_mode'] === 'none') return null;
-        if (in_array($o['next_mode'], self::event_keys(), true)) {
+        if (self::is_event_key($o['next_mode'])) {
             $event = $o['events'][$o['next_mode']] ?? null;
             return $event && !empty($event['enabled']) ? ['key' => $o['next_mode']] + $event : null;
         }
@@ -1753,14 +1761,14 @@ final class Garden_Opening_Status_V3 {
         $now = self::now();
         [$current, $future, $past] = self::current_and_future($o, $now);
 
-        if ($forced_state && in_array($forced_state, self::state_keys(), true)) {
-            $event_key = in_array($forced_event, self::event_keys(), true) ? $forced_event : 'spring';
+        if ($forced_state && self::is_state_key($forced_state)) {
+            $event_key = self::is_event_key($forced_event) ? $forced_event : 'spring';
             $event = ['key' => $event_key] + $o['events'][$event_key];
             return self::make_model($o, $forced_state, $event, $now);
         }
 
         if (($o['state_mode'] ?? 'manual') === 'manual') {
-            $event_key = in_array(($o['manual_event'] ?? ''), self::event_keys(), true) ? $o['manual_event'] : 'spring';
+            $event_key = self::is_event_key(($o['manual_event'] ?? '')) ? $o['manual_event'] : 'spring';
             $event = ['key' => $event_key] + $o['events'][$event_key];
             return self::make_model($o, $o['manual_state'] ?? 'closed', $event, $now);
         }
@@ -1877,9 +1885,9 @@ final class Garden_Opening_Status_V3 {
         $forced_event = '';
         if (self::is_status_preview()) {
             $candidate = sanitize_key($_GET['gos_force_state'] ?? '');
-            if (in_array($candidate, self::state_keys(), true)) $forced_state = $candidate;
+            if (self::is_state_key($candidate)) $forced_state = $candidate;
             $candidate_event = sanitize_key($_GET['gos_force_event'] ?? '');
-            if (in_array($candidate_event, self::event_keys(), true)) $forced_event = $candidate_event;
+            if (self::is_event_key($candidate_event)) $forced_event = $candidate_event;
         }
         $model = self::view_model($o, $forced_state, $forced_event);
         $context = [$o, $model];
@@ -1934,7 +1942,7 @@ final class Garden_Opening_Status_V3 {
 
         if (!self::should_render()) return;
         [$o, $model] = self::runtime_context();
-        $event_key = in_array(($model['event_key'] ?? ''), self::event_keys(), true) ? $model['event_key'] : 'spring';
+        $event_key = self::is_event_key(($model['event_key'] ?? '')) ? $model['event_key'] : 'spring';
         $desktop = $o['designs'][$event_key][$model['state']]['desktop'];
         $mobile  = $o['designs'][$event_key][$model['state']]['mobile'];
         $rgbd = self::hex_rgb($desktop['background_color']);
@@ -2329,7 +2337,7 @@ final class Garden_Opening_Status_V3 {
         ], $atts, 'garden_event_info');
 
         $season = sanitize_key((string)($atts['season'] !== '' ? $atts['season'] : $atts['event']));
-        if (!in_array($season, self::event_keys(), true)) $season = 'spring';
+        if (!self::is_event_key($season)) $season = 'spring';
         $lang = self::normalize_event_info_lang($atts['lang']);
 
         $o = self::options(false);
