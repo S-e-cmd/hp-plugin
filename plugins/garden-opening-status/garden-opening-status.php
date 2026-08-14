@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.84
+ * Version: 3.2.85
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.84';
+    const VERSION = '3.2.85';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -110,7 +110,8 @@ final class Garden_Opening_Status_V3 {
     public static function start_multilingual_theme_og_output_buffer() {
         if (is_admin()) return;
         $language = self::information_page_language();
-        if ($language !== 'en' && $language !== 'zh-Hant') return;
+        $is_event_page = self::current_event_page_season() !== '';
+        if ($language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return;
         ob_start([__CLASS__, 'filter_multilingual_theme_og_output']);
     }
 
@@ -118,7 +119,8 @@ final class Garden_Opening_Status_V3 {
         if (!is_string($html) || $html === '') return $html;
 
         $language = self::information_page_language();
-        if ($language !== 'en' && $language !== 'zh-Hant') return $html;
+        $is_event_page = self::current_event_page_season() !== '';
+        if ($language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return $html;
 
         $aioseo_marker = '<!-- All in One SEO';
         $marker_pos = stripos($html, $aioseo_marker);
@@ -181,9 +183,9 @@ final class Garden_Opening_Status_V3 {
     }
 
     /**
-     * Keep the permanent seasonal page as the SEO source of truth once confirmed
-     * dates are publicly released. Before release, leave the page's existing
-     * evergreen AIOSEO title/description untouched.
+     * Seasonal fixed pages always get public-safe AIOSEO metadata from plugin
+     * state instead of allowing AIOSEO to infer it from stored page content.
+     * Confirmed dates appear only after the event release gate opens.
      */
     private static function confirmed_event_page_seo_data() {
         $season = self::current_event_page_season();
@@ -193,34 +195,41 @@ final class Garden_Opening_Status_V3 {
         $event = self::event_from_options($options, $season);
         if (empty($event['enabled'])) return [];
 
-        $now = self::now();
-        if (!self::event_released($event, $now)) return [];
-
-        $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
-        if ($date_display_mode !== 'confirmed') return [];
-
-        $start_date = trim((string)($event['start'] ?? ''));
-        $end_date = trim((string)($event['end'] ?? ''));
-        if ($start_date === '' || $end_date === '') return [];
-
-        $start = self::dt($start_date, '00:00');
-        $end = self::dt($end_date, '23:59');
-        if (!$start || !$end || $end < $start) return [];
-
         $name = trim((string)($event['label'] ?? ''));
         if ($name === '') return [];
 
-        if ($start->format('Y') === $end->format('Y')) {
-            $range = $start->format('Y年n月j日') . '～' . $end->format('n月j日');
-            $description = $start->format('Y年') . 'の' . $name . 'は' . $start->format('n月j日') . 'から' . $end->format('n月j日') . 'まで開催します。';
-        } else {
-            $range = $start->format('Y年n月j日') . '～' . $end->format('Y年n月j日');
-            $description = $name . 'は' . $start->format('Y年n月j日') . 'から' . $end->format('Y年n月j日') . 'まで開催します。';
+        $now = self::now();
+        $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
+        $released = self::event_released($event, $now);
+        $start_date = trim((string)($event['start'] ?? ''));
+        $end_date = trim((string)($event['end'] ?? ''));
+
+        if ($released && $date_display_mode === 'confirmed' && $start_date !== '' && $end_date !== '') {
+            $start = self::dt($start_date, '00:00');
+            $end = self::dt($end_date, '23:59');
+            if ($start && $end && $end >= $start) {
+                if ($start->format('Y') === $end->format('Y')) {
+                    $range = $start->format('Y年n月j日') . '～' . $end->format('n月j日');
+                    $description = $start->format('Y年') . 'の' . $name . 'は' . $start->format('n月j日') . 'から' . $end->format('n月j日') . 'まで開催します。';
+                } else {
+                    $range = $start->format('Y年n月j日') . '～' . $end->format('Y年n月j日');
+                    $description = $name . 'は' . $start->format('Y年n月j日') . 'から' . $end->format('Y年n月j日') . 'まで開催します。';
+                }
+                return [
+                    'title' => $name . '｜' . $range . '｜上野東照宮ぼたん苑',
+                    'description' => $description . '開苑時間、入苑料、アクセスなどをご案内します。',
+                ];
+            }
         }
 
+        $usual = trim((string)($event['usual_period'] ?? ''));
+        $description = $name . 'の会期情報。';
+        if ($usual !== '') $description .= '例年の開苑期間は' . $usual . 'です。';
+        $description .= '開苑時間、入苑料、アクセスなどをご案内します。';
+
         return [
-            'title' => $name . '｜' . $range . '｜上野東照宮ぼたん苑',
-            'description' => $description . '開苑時間、入苑料、アクセスなどをご案内します。',
+            'title' => $name . '｜上野東照宮ぼたん苑',
+            'description' => $description,
         ];
     }
 
@@ -269,7 +278,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.84 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.85 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
