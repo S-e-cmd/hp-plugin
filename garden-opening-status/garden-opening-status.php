@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.75
+ * Version: 3.2.76
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.75';
+    const VERSION = '3.2.76';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -67,6 +67,7 @@ final class Garden_Opening_Status_V3 {
         add_action('gos_instagram_cron', [__CLASS__, 'instagram_refresh']);
         add_filter('cron_schedules', [__CLASS__, 'instagram_cron_schedules']);
         add_shortcode('garden_instagram_gallery', [__CLASS__, 'shortcode_instagram_gallery']);
+        add_action('wp_footer', [__CLASS__, 'instagram_lightbox_assets'], 102);
     }
 
     private static function information_page_language() {
@@ -3418,6 +3419,73 @@ final class Garden_Opening_Status_V3 {
         <?php
     }
 
+    public static function instagram_lightbox_assets() {
+        if (is_admin()) return;
+        $o = self::instagram_options();
+        if (empty($o['items'])) return;
+        ?>
+        <style id="gos-instagram-lightbox-style">
+        .gos-instagram-lightbox{position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(0,0,0,.82);box-sizing:border-box}.gos-instagram-lightbox[hidden]{display:none!important}.gos-instagram-lightbox__dialog{position:relative;max-width:min(92vw,980px);max-height:94vh;padding:18px 18px 12px;background:#fff7ef;box-shadow:0 12px 46px rgba(0,0,0,.35);box-sizing:border-box;overflow:auto}.gos-instagram-lightbox__image{display:block;max-width:100%;max-height:calc(94vh - 145px);width:auto;height:auto;margin:0 auto;object-fit:contain}.gos-instagram-lightbox__caption{margin:12px 4px 0;color:#111;font-size:18px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}.gos-instagram-lightbox__instagram{display:inline-block;margin:8px 4px 0;color:#555!important;font-size:13px;text-decoration:underline!important}.gos-instagram-lightbox__close{position:fixed;top:14px;right:18px;width:52px;height:52px;border:3px solid #222;border-radius:50%;background:#fff;color:#222;font-size:38px;line-height:42px;font-family:Arial,sans-serif;cursor:pointer;box-shadow:0 2px 0 rgba(255,255,255,.8);z-index:2}.gos-instagram-lightbox-open{overflow:hidden!important}@media(max-width:600px){.gos-instagram-lightbox{padding:14px}.gos-instagram-lightbox__dialog{max-width:100%;max-height:92vh;padding:10px 10px 9px}.gos-instagram-lightbox__image{max-height:calc(92vh - 125px)}.gos-instagram-lightbox__caption{font-size:15px;margin-top:9px}.gos-instagram-lightbox__close{top:8px;right:8px;width:44px;height:44px;font-size:32px;line-height:34px;border-width:2px}}
+        </style>
+        <script id="gos-instagram-lightbox-script">
+        (function(){
+            if(window.GOSInstagramLightboxReady)return;
+            window.GOSInstagramLightboxReady=true;
+            var modal=null,lastFocused=null;
+            function ensure(){
+                if(modal)return modal;
+                modal=document.createElement('div');
+                modal.className='gos-instagram-lightbox';
+                modal.hidden=true;
+                modal.setAttribute('role','dialog');
+                modal.setAttribute('aria-modal','true');
+                modal.setAttribute('aria-label','Instagram画像拡大表示');
+                modal.innerHTML='<button type="button" class="gos-instagram-lightbox__close" aria-label="閉じる">×</button><div class="gos-instagram-lightbox__dialog"><img class="gos-instagram-lightbox__image" alt=""><div class="gos-instagram-lightbox__caption"></div><a class="gos-instagram-lightbox__instagram" target="_blank" rel="noopener noreferrer">Instagramで開く</a></div>';
+                document.body.appendChild(modal);
+                modal.querySelector('.gos-instagram-lightbox__close').addEventListener('click',close);
+                modal.addEventListener('click',function(e){if(e.target===modal)close()});
+                return modal;
+            }
+            function close(){
+                if(!modal||modal.hidden)return;
+                modal.hidden=true;
+                document.documentElement.classList.remove('gos-instagram-lightbox-open');
+                document.body.classList.remove('gos-instagram-lightbox-open');
+                if(lastFocused&&typeof lastFocused.focus==='function')lastFocused.focus();
+            }
+            function open(item){
+                var box=ensure();
+                var img=item.querySelector('img');
+                var src=item.getAttribute('data-gos-image')||(img&&(img.currentSrc||img.src))||'';
+                if(!src)return;
+                lastFocused=item;
+                var large=box.querySelector('.gos-instagram-lightbox__image');
+                large.src=src;
+                large.alt=(img&&img.alt)||'';
+                var caption=item.getAttribute('data-gos-caption')||'';
+                var captionEl=box.querySelector('.gos-instagram-lightbox__caption');
+                captionEl.textContent=caption;
+                captionEl.hidden=!caption;
+                var link=box.querySelector('.gos-instagram-lightbox__instagram');
+                link.href=item.href;
+                box.hidden=false;
+                document.documentElement.classList.add('gos-instagram-lightbox-open');
+                document.body.classList.add('gos-instagram-lightbox-open');
+                box.querySelector('.gos-instagram-lightbox__close').focus();
+            }
+            document.addEventListener('click',function(e){
+                if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+                var item=e.target.closest&&e.target.closest('.gos-instagram-gallery__item[data-gos-instagram-lightbox]');
+                if(!item)return;
+                e.preventDefault();
+                open(item);
+            });
+            document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+        })();
+        </script>
+        <?php
+    }
+
     public static function shortcode_instagram_gallery($atts) {
         $o = self::instagram_options();
         // Placing the shortcode is itself an explicit instruction to display.
@@ -3438,7 +3506,7 @@ final class Garden_Opening_Status_V3 {
             <?php if ((string)$atts['heading'] !== ''): ?><h2 class="gos-instagram-gallery__heading"><?php echo esc_html($atts['heading']); ?></h2><?php endif; ?>
             <div class="gos-instagram-gallery__grid">
                 <?php foreach ($items as $item): ?>
-                    <a class="gos-instagram-gallery__item" href="<?php echo esc_url($item['permalink']); ?>" target="_blank" rel="noopener noreferrer">
+                    <a class="gos-instagram-gallery__item" href="<?php echo esc_url($item['permalink']); ?>" target="_blank" rel="noopener noreferrer" data-gos-instagram-lightbox data-gos-image="<?php echo esc_url($item['image_url']); ?>" data-gos-caption="<?php echo esc_attr((string)$item['caption']); ?>">
                         <img src="<?php echo esc_url($item['image_url']); ?>" alt="<?php echo esc_attr(wp_trim_words((string)$item['caption'], 12, '')); ?>" loading="lazy" decoding="async">
                         <?php if (($item['media_type'] ?? '') === 'VIDEO'): ?><span class="gos-instagram-gallery__video" aria-hidden="true">▶</span><?php endif; ?>
                     </a>
