@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.86
+ * Version: 3.2.87
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.86';
+    const VERSION = '3.2.87';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -37,12 +37,17 @@ final class Garden_Opening_Status_V3 {
         add_action('pre_get_posts', [__CLASS__, 'exclude_permanent_guide_from_news_queries'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
+        add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_japanese_home_schema'], 35);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_multilingual_title'], 100);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_multilingual_description'], 100);
+        add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_japanese_home_title'], 105);
+        add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_japanese_home_description'], 105);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_event_page_title'], 110);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_event_page_description'], 110);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
+        add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_japanese_home_facebook_tags'], 105);
+        add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_japanese_home_twitter_tags'], 105);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_event_page_facebook_tags'], 110);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_event_page_twitter_tags'], 110);
         add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
@@ -113,7 +118,7 @@ final class Garden_Opening_Status_V3 {
         if (is_admin()) return;
         $language = self::information_page_language();
         $is_event_page = self::current_event_page_season() !== '';
-        if ($language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return;
+        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return;
         ob_start([__CLASS__, 'filter_multilingual_theme_og_output']);
     }
 
@@ -122,7 +127,7 @@ final class Garden_Opening_Status_V3 {
 
         $language = self::information_page_language();
         $is_event_page = self::current_event_page_season() !== '';
-        if ($language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return $html;
+        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return $html;
 
         $aioseo_marker = '<!-- All in One SEO';
         $marker_pos = stripos($html, $aioseo_marker);
@@ -182,6 +187,79 @@ final class Garden_Opening_Status_V3 {
         $language = self::information_page_language();
         $localized = self::multilingual_page_description($language);
         return $localized !== '' ? $localized : $description;
+    }
+
+    /**
+     * Japanese home-page search metadata. This changes head metadata only;
+     * visible page content, headings, and layout remain untouched.
+     */
+    private static function japanese_home_seo_config() {
+        if (!is_front_page() || self::information_page_language() !== 'ja') return [];
+        return [
+            'title' => '東京・上野の日本庭園｜季節の花を楽しむ上野東照宮ぼたん苑',
+            'description' => '東京・上野公園にある上野東照宮ぼたん苑。回遊形式の日本庭園で、春と冬の牡丹、秋のダリアなど季節の花を楽しめます。上野観光・東京の庭園散策にもおすすめです。',
+            'image' => home_url('/wp-content/uploads/2021/03/main1_sp.png'),
+            'image_width' => '1450',
+            'image_height' => '860',
+        ];
+    }
+
+    public static function filter_aioseo_japanese_home_title($title) {
+        $seo = self::japanese_home_seo_config();
+        return !empty($seo['title']) ? $seo['title'] : $title;
+    }
+
+    public static function filter_aioseo_japanese_home_description($description) {
+        $seo = self::japanese_home_seo_config();
+        return !empty($seo['description']) ? $seo['description'] : $description;
+    }
+
+    public static function filter_aioseo_japanese_home_facebook_tags($tags) {
+        $seo = self::japanese_home_seo_config();
+        if (!$seo || !is_array($tags)) return $tags;
+        $tags['og:locale'] = 'ja_JP';
+        $tags['og:type'] = 'website';
+        $tags['og:url'] = home_url('/');
+        $tags['og:title'] = $seo['title'];
+        $tags['og:description'] = $seo['description'];
+        $tags['og:image'] = $seo['image'];
+        $tags['og:image:secure_url'] = $seo['image'];
+        $tags['og:image:width'] = $seo['image_width'];
+        $tags['og:image:height'] = $seo['image_height'];
+        return $tags;
+    }
+
+    public static function filter_aioseo_japanese_home_twitter_tags($tags) {
+        $seo = self::japanese_home_seo_config();
+        if (!$seo || !is_array($tags)) return $tags;
+        $tags['twitter:title'] = $seo['title'];
+        $tags['twitter:description'] = $seo['description'];
+        $tags['twitter:image'] = $seo['image'];
+        return $tags;
+    }
+
+    private static function localize_aioseo_japanese_home_schema_node(&$node, $seo) {
+        if (!is_array($node)) return;
+        $types = [];
+        if (isset($node['@type'])) {
+            $types = is_array($node['@type']) ? $node['@type'] : [$node['@type']];
+        }
+        if (in_array('WebPage', $types, true)) {
+            $node['name'] = $seo['title'];
+            $node['description'] = $seo['description'];
+            $node['inLanguage'] = 'ja';
+        }
+        foreach ($node as &$child) {
+            if (is_array($child)) self::localize_aioseo_japanese_home_schema_node($child, $seo);
+        }
+        unset($child);
+    }
+
+    public static function filter_aioseo_japanese_home_schema($graphs) {
+        $seo = self::japanese_home_seo_config();
+        if (!$seo || !is_array($graphs)) return $graphs;
+        self::localize_aioseo_japanese_home_schema_node($graphs, $seo);
+        return $graphs;
     }
 
     /**
@@ -331,7 +409,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.86 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.87 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -391,7 +469,7 @@ final class Garden_Opening_Status_V3 {
     public static function start_description_output_buffer() {
         if (is_admin()) return;
         $language = self::information_page_language();
-        if ($language === '' || $language === 'en' || $language === 'zh-Hant') return;
+        if ($language === '' || $language === 'ja' || $language === 'en' || $language === 'zh-Hant') return;
         ob_start([__CLASS__, 'filter_description_output']);
     }
 
