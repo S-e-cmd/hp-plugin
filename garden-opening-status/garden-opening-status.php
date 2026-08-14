@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.80
+ * Version: 3.2.81
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.80';
+    const VERSION = '3.2.81';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -37,6 +37,7 @@ final class Garden_Opening_Status_V3 {
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_multilingual_title'], 100);
+        add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_multilingual_description'], 100);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
         add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
@@ -137,6 +138,12 @@ final class Garden_Opening_Status_V3 {
         return $seo ? $seo['title'] : $title;
     }
 
+    public static function filter_aioseo_multilingual_description($description) {
+        $language = self::information_page_language();
+        $localized = self::multilingual_page_description($language);
+        return $localized !== '' ? $localized : $description;
+    }
+
     public static function filter_aioseo_multilingual_facebook_tags($tags) {
         $language = self::information_page_language();
         $seo = self::multilingual_seo_config($language);
@@ -172,7 +179,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.80 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.81 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -230,7 +237,9 @@ final class Garden_Opening_Status_V3 {
      * tags, so the completed HTML is filtered to leave one language-appropriate set.
      */
     public static function start_description_output_buffer() {
-        if (is_admin() || self::information_page_language() === '') return;
+        if (is_admin()) return;
+        $language = self::information_page_language();
+        if ($language === '' || $language === 'en' || $language === 'zh-Hant') return;
         ob_start([__CLASS__, 'filter_description_output']);
     }
 
@@ -238,11 +247,8 @@ final class Garden_Opening_Status_V3 {
         if (!is_string($html) || $html === '') return $html;
 
         $language = self::information_page_language();
-        if ($language === 'en' || $language === 'zh-Hant') {
-            $description = self::multilingual_page_description($language);
-        } else {
-            $description = '上野東照宮の参道内にあるぼたん苑です。「上野・東照宮 冬ぼたん」、春のぼたん祭、ダリア綾なす秋の園を開催し、冬咲きぼたんや春の牡丹、秋のダリアをお楽しみいただけます。';
-        }
+        if ($language === 'en' || $language === 'zh-Hant') return $html;
+        $description = '上野東照宮の参道内にあるぼたん苑です。「上野・東照宮 冬ぼたん」、春のぼたん祭、ダリア綾なす秋の園を開催し、冬咲きぼたんや春の牡丹、秋のダリアをお楽しみいただけます。';
 
         $patterns = [
             '~<meta\b(?=[^>]*\bname\s*=\s*(["\'])description\1)[^>]*>\s*~i',
@@ -252,44 +258,16 @@ final class Garden_Opening_Status_V3 {
         $html = preg_replace($patterns, '', $html);
         if (!is_string($html)) return '';
 
-        $seo = self::multilingual_seo_config($language);
-        $seo_meta = '';
-        if ($seo) {
-            $seo_patterns = [
-                '~<title\b[^>]*>.*?</title>\s*~is',
-                '~<meta\b(?=[^>]*\bproperty\s*=\s*(["\'])og:(?:type|url|title|site_name|locale|image(?::(?:secure_url|width|height))?)\1)[^>]*>\s*~i',
-                '~<meta\b(?=[^>]*\bname\s*=\s*(["\'])twitter:(?:title|image)\1)[^>]*>\s*~i',
-            ];
-            $html = preg_replace($seo_patterns, '', $html);
-            if (!is_string($html)) return '';
-
-            $page_url = home_url($seo['path']);
-            $image_url = home_url('/wp-content/uploads/2021/03/main1_sp.png');
-            $seo_meta .= "\n<!-- Garden multilingual SEO -->\n";
-            $seo_meta .= '<title>' . esc_html($seo['title']) . '</title>' . "\n";
-            $seo_meta .= '<meta property="og:locale" content="' . esc_attr($seo['og_locale']) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:type" content="article" />' . "\n";
-            $seo_meta .= '<meta property="og:url" content="' . esc_url($page_url) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:title" content="' . esc_attr($seo['title']) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:site_name" content="' . esc_attr($seo['site_name']) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:image" content="' . esc_url($image_url) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:image:secure_url" content="' . esc_url($image_url) . '" />' . "\n";
-            $seo_meta .= '<meta property="og:image:width" content="1450" />' . "\n";
-            $seo_meta .= '<meta property="og:image:height" content="860" />' . "\n";
-            $seo_meta .= '<meta name="twitter:title" content="' . esc_attr($seo['title']) . '" />' . "\n";
-            $seo_meta .= '<meta name="twitter:image" content="' . esc_url($image_url) . '" />' . "\n";
-        }
-
         $meta = "\n<!-- Garden page descriptions -->\n";
         $meta .= '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
         $meta .= '<meta property="og:description" content="' . esc_attr($description) . '" />' . "\n";
         $meta .= '<meta name="twitter:description" content="' . esc_attr($description) . '" />' . "\n";
 
         if (stripos($html, '</head>') !== false) {
-            return preg_replace('~</head>~i', $seo_meta . $meta . '</head>', $html, 1);
+            return preg_replace('~</head>~i', $meta . '</head>', $html, 1);
         }
 
-        return $html . $seo_meta . $meta;
+        return $html . $meta;
     }
 
     private static function permanent_guide_config() {
