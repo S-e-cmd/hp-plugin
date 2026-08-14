@@ -439,7 +439,6 @@ final class Garden_Opening_Status_V3 {
                 $item['description'] = implode(' ', $description_parts);
             }
 
-            $page_id = self::resolve_event_page_id($event, $season);
             if ($page_id > 0) {
                 $image = get_the_post_thumbnail_url($page_id, 'full');
                 if ($image) $item['image'] = [$image];
