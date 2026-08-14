@@ -1,0 +1,28 @@
+name: Package GOS 3.2.75
+on:
+  push:
+    branches:
+      - agent/package-gos-3275
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.event.head_commit.message == 'Package garden opening status 3.2.75'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version
+        run: |
+          grep -q 'Version: 3.2.75' garden-opening-status/garden-opening-status.php
+          grep -q "const VERSION = '3.2.75';" garden-opening-status/garden-opening-status.php
+      - name: Build plugin zip
+        run: |
+          rm -f garden-opening-status-v3.2.75.zip
+          zip -r garden-opening-status-v3.2.75.zip garden-opening-status >/dev/null
+          unzip -l garden-opening-status-v3.2.75.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.75
+          path: garden-opening-status-v3.2.75.zip
+          if-no-files-found: error
+          retention-days: 1
