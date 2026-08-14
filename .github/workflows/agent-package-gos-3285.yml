@@ -1,0 +1,24 @@
+name: Package garden opening status 3.2.85
+on:
+  push:
+    branches: [artifact/gos-3285-wp-zip]
+    paths: ['.github/workflows/agent-package-gos-3285.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plugin
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          grep -F 'Version: 3.2.85' garden-opening-status/garden-opening-status.php
+      - name: Build plugin zip
+        run: |
+          mkdir -p dist
+          zip -qr dist/garden-opening-status-v3.2.85.zip garden-opening-status
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.85
+          path: dist/garden-opening-status-v3.2.85.zip
