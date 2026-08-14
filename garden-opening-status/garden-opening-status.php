@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.90
+ * Version: 3.2.91
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.90';
+    const VERSION = '3.2.91';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -347,6 +347,7 @@ final class Garden_Opening_Status_V3 {
         if ($name === '') return [];
         $is_spring = $season === 'spring';
         $is_autumn = $season === 'autumn';
+        $is_winter = $season === 'winter';
 
         $now = self::now();
         $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
@@ -377,6 +378,12 @@ final class Garden_Opening_Status_V3 {
                         'description' => $description . '東京・上野の上野東照宮ぼたん苑で、多彩なダリアをはじめとする秋の花を楽しめます。開苑時間、入苑料、アクセスなどをご案内します。',
                     ];
                 }
+                if ($is_winter) {
+                    return [
+                        'title' => $name . '｜' . $range . '｜東京・上野の上野東照宮ぼたん苑',
+                        'description' => $description . '東京・上野の上野東照宮ぼたん苑で、冬咲き牡丹を楽しめます。開苑時間、入苑料、アクセスなどをご案内します。',
+                    ];
+                }
                 return [
                     'title' => $name . '｜' . $range . '｜上野東照宮ぼたん苑',
                     'description' => $description . '開苑時間、入苑料、アクセスなどをご案内します。',
@@ -395,6 +402,12 @@ final class Garden_Opening_Status_V3 {
             return [
                 'title' => '東京・上野でダリアを楽しむ｜' . $name . '｜上野東照宮ぼたん苑',
                 'description' => '東京・上野の上野東照宮ぼたん苑で開催する' . $name . '。秋の庭園で多彩なダリアを楽しめます。' . ($usual !== '' ? '例年の開苑時期は' . $usual . 'です。' : '') . '開苑時間、入苑料、アクセスをご案内します。',
+            ];
+        }
+        if ($is_winter) {
+            return [
+                'title' => '東京・上野で冬咲き牡丹を楽しむ｜' . $name . '｜上野東照宮ぼたん苑',
+                'description' => '東京・上野の上野東照宮ぼたん苑で楽しむ冬咲き牡丹。冬の日本庭園で牡丹を観賞できます。' . ($usual !== '' ? '例年の開苑時期は' . $usual . 'です。' : '') . '開苑時間、入苑料、アクセスをご案内します。',
             ];
         }
 
@@ -504,7 +517,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.90 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.91 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
