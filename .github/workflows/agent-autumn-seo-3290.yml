@@ -23,7 +23,7 @@ jobs:
           git diff --check
           grep -F 'Version: 3.2.90' garden-opening-status/garden-opening-status.php
           grep -F '東京・上野でダリアを楽しむ' garden-opening-status/garden-opening-status.php
-          grep -F "$is_autumn = $season === 'autumn';" garden-opening-status/garden-opening-status.php
+          grep -F '$is_autumn = $season === '\''autumn'\'';' garden-opening-status/garden-opening-status.php
       - name: Commit patch
         run: |
           git config user.name 'github-actions[bot]'
