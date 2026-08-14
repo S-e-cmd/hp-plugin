@@ -1,0 +1,33 @@
+name: Apply event social image 3.2.86
+on:
+  push:
+    branches: [feature/event-social-image-3286]
+    paths: ['.github/workflows/agent-event-social-image-3286.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/event-social-image-3286
+      - name: Apply patch
+        run: python3 .github/agent-patch-gos-3286.py
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.86' garden-opening-status/garden-opening-status.php
+          grep -F "filter_aioseo_event_page_facebook_tags" garden-opening-status/garden-opening-status.php
+          grep -F "get_post_thumbnail_id" garden-opening-status/garden-opening-status.php
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m "Use seasonal page images for social sharing in 3.2.86"
+          git push origin HEAD:feature/event-social-image-3286
