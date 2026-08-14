@@ -13,7 +13,7 @@ jobs:
         with:
           ref: feature/seo-admin-settings-3295
       - name: Apply patch
-        run: git apply .github/agent-seo-admin-3295.patch
+        run: python3 .github/agent-seo-admin-3295.py
       - name: Validate
         run: |
           php -l garden-opening-status/garden-opening-status.php
