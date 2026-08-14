@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   refactor:
-    if: github.event.head_commit.message == 'Add guarded JSON-LD helper workflow'
+    if: github.event.head_commit.message == 'Fix guarded JSON-LD helper workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,23 +23,27 @@ jobs:
           if texts[0] != texts[1]:
               raise SystemExit('duplicate PHP copies differ before refactor')
           text=texts[0]
-          block="""        echo '<script type=\"application/ld+json\">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . \"\\n\";
-"""
+          block='\n'.join([
+              "        echo '<script type=\"application/ld+json\">';",
+              "        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);",
+              "        echo '</script>' . \"\\n\";",
+              '',
+          ])
           if text.count(block) != 4:
               raise SystemExit(f'unexpected JSON-LD output block count: {text.count(block)}')
           text=text.replace(block,"        self::output_json_ld($data);\n")
           marker="    public static function output_permanent_guide_structured_data() {\n"
           if text.count(marker) != 1:
               raise SystemExit('output_permanent_guide_structured_data marker not unique')
-          helper="""    private static function output_json_ld($data) {
-        echo '<script type=\"application/ld+json\">';
-        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        echo '</script>' . \"\\n\";
-    }
-
-"""
+          helper='\n'.join([
+              '    private static function output_json_ld($data) {',
+              "        echo '<script type=\"application/ld+json\">';",
+              "        echo wp_json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);",
+              "        echo '</script>' . \"\\n\";",
+              '    }',
+              '',
+              '',
+          ])
           text=text.replace(marker,helper+marker,1)
           if text.count('self::output_json_ld($data);') != 4:
               raise SystemExit('expected four helper call sites')
