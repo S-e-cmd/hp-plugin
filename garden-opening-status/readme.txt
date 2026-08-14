@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.92
+
+3.2.92:
+- 日本語アクセスページ /access/ の表示本文を変更せず、title / descriptionを「上野駅・上野公園・行き方・アクセス」文脈へ調整
+- /access/ のOG / Twitter / AIOSEO WebPage・CollectionPage schemaを同じtitle / descriptionへ同期
+- /access/ の旧テーマOGを除去しAIOSEOをheadメタ情報の正本に統一
+- 会期・日付連動、トップ、会期一覧、春・秋・冬、英語・繁体字、本文・見出し・レイアウトには変更なし
+
 開催情報・開催状況管理 3.2.91
 
 3.2.91:
