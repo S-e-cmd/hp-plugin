@@ -1,3 +1,13 @@
+開催情報・開催状況管理 3.2.95
+
+3.2.95:
+- 管理画面にSEO設定を追加し、トップ・会期一覧・春・秋・冬・アクセス・ご入苑案内・お問い合わせ・英語・繁体字のtitle / descriptionを編集可能化
+- 春・秋・冬は通常時に加えて確定会期公開時のtitle / descriptionも編集可能化し、{event} / {date_range} / {usual_period_sentence} / {confirmed_sentence}の自動置換を維持
+- 空欄設定は3.2.94までの既定値へfallbackし、OG / Twitter / schemaは既存どおりSEO設定へ自動同期
+- 英語SEOを「Peonies, Dahlias & Seasonal Flowers in Tokyo」と上野駅アクセスを含む説明文へ更新
+- 繁体字SEOを「東京上野賞牡丹、大麗花與四季花卉」とJR上野站徒歩約5分を含む説明文へ更新
+- meta keywords欄は追加せず、表示本文・見出し・フォーム・レイアウト、Event schemaの公開条件は変更なし
+
 開催情報・開催状況管理 3.2.94
 
 3.2.94:
