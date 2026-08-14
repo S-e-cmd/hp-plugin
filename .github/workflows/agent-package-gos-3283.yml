@@ -1,0 +1,38 @@
+name: Package garden opening status 3.2.83
+on:
+  push:
+    branches:
+      - artifact/gos-3283-wp-zip
+    paths:
+      - .github/workflows/agent-package-gos-3283.yml
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: artifact/gos-3283-wp-zip
+      - name: Validate and package
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          test "$(grep -c '^ \* Plugin Name:' garden-opening-status/garden-opening-status.php)" -eq 1
+          grep -F ' * Version: 3.2.83' garden-opening-status/garden-opening-status.php
+          rm -f garden-opening-status-v3.2.83.zip
+          zip -qr garden-opening-status-v3.2.83.zip garden-opening-status
+          unzip -t garden-opening-status-v3.2.83.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garden-opening-status-v3.2.83
+          path: garden-opening-status-v3.2.83.zip
+      - name: Remove temporary workflow
+        run: |
+          rm .github/workflows/agent-package-gos-3283.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Remove temporary 3.2.83 packaging workflow'
+          git push origin HEAD:artifact/gos-3283-wp-zip
