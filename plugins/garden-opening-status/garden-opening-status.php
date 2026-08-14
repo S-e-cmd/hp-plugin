@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.88
+ * Version: 3.2.89
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.88';
+    const VERSION = '3.2.89';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -345,6 +345,7 @@ final class Garden_Opening_Status_V3 {
 
         $name = trim((string)($event['label'] ?? ''));
         if ($name === '') return [];
+        $is_spring = $season === 'spring';
 
         $now = self::now();
         $date_display_mode = sanitize_key((string)($event['date_display_mode'] ?? 'usual'));
@@ -363,6 +364,12 @@ final class Garden_Opening_Status_V3 {
                     $range = $start->format('Y年n月j日') . '～' . $end->format('Y年n月j日');
                     $description = $name . 'は' . $start->format('Y年n月j日') . 'から' . $end->format('Y年n月j日') . 'まで開催します。';
                 }
+                if ($is_spring) {
+                    return [
+                        'title' => $name . '｜' . $range . '｜東京・上野の上野東照宮ぼたん苑',
+                        'description' => $description . '東京・上野の上野東照宮ぼたん苑で、牡丹をはじめとする春の花を楽しめます。開苑時間、入苑料、アクセスなどをご案内します。',
+                    ];
+                }
                 return [
                     'title' => $name . '｜' . $range . '｜上野東照宮ぼたん苑',
                     'description' => $description . '開苑時間、入苑料、アクセスなどをご案内します。',
@@ -371,6 +378,13 @@ final class Garden_Opening_Status_V3 {
         }
 
         $usual = trim((string)($event['usual_period'] ?? ''));
+        if ($is_spring) {
+            return [
+                'title' => '東京・上野で牡丹を楽しむ｜' . $name . '｜上野東照宮ぼたん苑',
+                'description' => '東京・上野の上野東照宮ぼたん苑で開催する' . $name . '。日本庭園で牡丹をはじめとする春の花を楽しめます。' . ($usual !== '' ? '例年の開苑時期は' . $usual . 'です。' : '') . '開苑時間、入苑料、アクセスをご案内します。',
+            ];
+        }
+
         $description = $name . 'の会期情報。';
         if ($usual !== '') $description .= '例年の開苑期間は' . $usual . 'です。';
         $description .= '開苑時間、入苑料、アクセスなどをご案内します。';
@@ -477,7 +491,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.88 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.89 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
