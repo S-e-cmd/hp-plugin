@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.88
+
+3.2.88:
+- 会期一覧 /schedule/ の表示本文を変更せず、title / descriptionを「東京・上野・季節の花・牡丹・ダリア」文脈へ調整
+- /schedule/ のOG / Twitter / AIOSEO WebPage・CollectionPage schemaを同じtitle / descriptionへ同期
+- /schedule/ の旧テーマOGを除去しAIOSEOをheadメタ情報の正本に統一
+- 共有画像、各会期ページ、トップ、英語・繁体字、本文・見出し・レイアウトには変更なし
+
 開催情報・開催状況管理 3.2.87
 
 3.2.87:
