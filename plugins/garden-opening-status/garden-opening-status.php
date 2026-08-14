@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.78
+ * Version: 3.2.79
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.78';
+    const VERSION = '3.2.79';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -35,6 +35,7 @@ final class Garden_Opening_Status_V3 {
         add_action('template_redirect', [__CLASS__, 'start_permanent_guide_output_buffer'], -90);
         add_action('pre_get_posts', [__CLASS__, 'exclude_permanent_guide_from_news_queries'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
+        add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
         add_action('wp_head', [__CLASS__, 'output_hreflang_links'], 5);
         add_action('wp_head', [__CLASS__, 'output_facility_structured_data'], 6);
         add_action('wp_head', [__CLASS__, 'output_event_structured_data'], 7);
@@ -93,6 +94,79 @@ final class Garden_Opening_Status_V3 {
         return trim($output . ' lang="' . esc_attr($lang) . '"');
     }
 
+    private static function multilingual_seo_config($language) {
+        if ($language === 'en') {
+            return [
+                'title' => 'Ueno Toshogu Peony Garden | Peonies & Dahlias in Tokyo',
+                'page_name' => 'Ueno Toshogu Peony Garden',
+                'home_name' => 'Home',
+                'site_name' => 'Ueno Toshogu Peony Garden',
+                'og_locale' => 'en_US',
+                'path' => '/english/',
+            ];
+        }
+        if ($language === 'zh-Hant') {
+            return [
+                'title' => '上野東照宮牡丹園｜東京上野賞牡丹・大麗花',
+                'page_name' => '上野東照宮牡丹園',
+                'home_name' => '首頁',
+                'site_name' => '上野東照宮牡丹園',
+                'og_locale' => 'zh_TW',
+                'path' => '/chinese/',
+            ];
+        }
+        return [];
+    }
+
+    private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
+        if (!is_array($node)) return;
+
+        $types = [];
+        if (isset($node['@type'])) {
+            $types = is_array($node['@type']) ? $node['@type'] : [$node['@type']];
+        }
+
+        if (in_array('WebPage', $types, true)) {
+            $node['name'] = $seo['title'];
+            $node['inLanguage'] = $language;
+        }
+
+        if (in_array('BreadcrumbList', $types, true) && !empty($node['itemListElement']) && is_array($node['itemListElement'])) {
+            foreach ($node['itemListElement'] as &$item) {
+                if (!is_array($item)) continue;
+                $position = isset($item['position']) ? (int)$item['position'] : 0;
+                if ($position === 1) {
+                    $item['name'] = $seo['home_name'];
+                    if (isset($item['nextItem']) && is_array($item['nextItem'])) {
+                        $item['nextItem']['name'] = $seo['page_name'];
+                    }
+                } elseif ($position === 2) {
+                    $item['name'] = $seo['page_name'];
+                    if (isset($item['previousItem']) && is_array($item['previousItem'])) {
+                        $item['previousItem']['name'] = $seo['home_name'];
+                    }
+                }
+            }
+            unset($item);
+        }
+
+        foreach ($node as &$child) {
+            if (is_array($child)) {
+                self::localize_aioseo_multilingual_schema_node($child, $language, $seo);
+            }
+        }
+        unset($child);
+    }
+
+    public static function filter_aioseo_multilingual_schema($graphs) {
+        $language = self::information_page_language();
+        $seo = self::multilingual_seo_config($language);
+        if (!$seo || !is_array($graphs)) return $graphs;
+
+        self::localize_aioseo_multilingual_schema_node($graphs, $language, $seo);
+        return $graphs;
+    }
+
     /**
      * Normalize description metadata on the Japanese, English, and Traditional
      * Chinese information pages. The theme and SEO plugin both output description
@@ -123,16 +197,44 @@ final class Garden_Opening_Status_V3 {
         $html = preg_replace($patterns, '', $html);
         if (!is_string($html)) return '';
 
+        $seo = self::multilingual_seo_config($language);
+        $seo_meta = '';
+        if ($seo) {
+            $seo_patterns = [
+                '~<title\b[^>]*>.*?</title>\s*~is',
+                '~<meta\b(?=[^>]*\bproperty\s*=\s*(["\'])og:(?:type|url|title|site_name|locale|image(?::(?:secure_url|width|height))?)\1)[^>]*>\s*~i',
+                '~<meta\b(?=[^>]*\bname\s*=\s*(["\'])twitter:(?:title|image)\1)[^>]*>\s*~i',
+            ];
+            $html = preg_replace($seo_patterns, '', $html);
+            if (!is_string($html)) return '';
+
+            $page_url = home_url($seo['path']);
+            $image_url = home_url('/wp-content/uploads/2021/03/main1_sp.png');
+            $seo_meta .= "\n<!-- Garden multilingual SEO -->\n";
+            $seo_meta .= '<title>' . esc_html($seo['title']) . '</title>' . "\n";
+            $seo_meta .= '<meta property="og:locale" content="' . esc_attr($seo['og_locale']) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:type" content="article" />' . "\n";
+            $seo_meta .= '<meta property="og:url" content="' . esc_url($page_url) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:title" content="' . esc_attr($seo['title']) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:site_name" content="' . esc_attr($seo['site_name']) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:image" content="' . esc_url($image_url) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:image:secure_url" content="' . esc_url($image_url) . '" />' . "\n";
+            $seo_meta .= '<meta property="og:image:width" content="1450" />' . "\n";
+            $seo_meta .= '<meta property="og:image:height" content="860" />' . "\n";
+            $seo_meta .= '<meta name="twitter:title" content="' . esc_attr($seo['title']) . '" />' . "\n";
+            $seo_meta .= '<meta name="twitter:image" content="' . esc_url($image_url) . '" />' . "\n";
+        }
+
         $meta = "\n<!-- Garden page descriptions -->\n";
         $meta .= '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
         $meta .= '<meta property="og:description" content="' . esc_attr($description) . '" />' . "\n";
         $meta .= '<meta name="twitter:description" content="' . esc_attr($description) . '" />' . "\n";
 
         if (stripos($html, '</head>') !== false) {
-            return preg_replace('~</head>~i', $meta . '</head>', $html, 1);
+            return preg_replace('~</head>~i', $seo_meta . $meta . '</head>', $html, 1);
         }
 
-        return $html . $meta;
+        return $html . $seo_meta . $meta;
     }
 
     private static function permanent_guide_config() {
