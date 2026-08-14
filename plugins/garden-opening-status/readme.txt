@@ -1,3 +1,12 @@
+開催情報・開催状況管理 3.2.81
+
+3.2.81:
+- English / Chinese ではHTML完成後のSEOタグ削除・再挿入を停止
+- 通常descriptionも aioseo_description で言語別に直接補正
+- title / OG / Twitter / schema はAIOSEOフィルタ経路で維持
+- 日本語トップの既存description整理は従来処理を維持
+- canonical、hreflang、既存TouristAttraction schemaは変更なし
+
 開催情報・開催状況管理 3.2.80
 
 3.2.80:
