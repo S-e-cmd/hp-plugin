@@ -1,0 +1,101 @@
+name: Temporary guarded Instagram item normalization cleanup
+
+on:
+  push:
+    branches:
+      - agent/normalize-instagram-items
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded Instagram item normalization workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Instagram item normalization seam
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+
+          old_lines = [
+              "        $items = [];",
+              "        foreach ((array)$body['data'] as $item) {",
+              "            if (!is_array($item) || empty($item['permalink'])) continue;",
+              "            $image = ($item['media_type'] ?? '') === 'VIDEO' ? ($item['thumbnail_url'] ?? '') : ($item['media_url'] ?? '');",
+              "            if ($image === '') continue;",
+              "            $items[] = [",
+              "                'id' => sanitize_text_field((string)($item['id'] ?? '')),",
+              "                'caption' => sanitize_textarea_field((string)($item['caption'] ?? '')),",
+              "                'media_type' => sanitize_key((string)($item['media_type'] ?? 'IMAGE')),",
+              "                'image_url' => esc_url_raw($image),",
+              "                'permalink' => esc_url_raw((string)$item['permalink']),",
+              "                'timestamp' => sanitize_text_field((string)($item['timestamp'] ?? '')),",
+              "            ];",
+              "            if (count($items) >= 12) break;",
+              "        }",
+          ]
+          old = '\n'.join(old_lines)
+          if text.count(old) != 1:
+              raise SystemExit(f'unexpected normalization block count: {text.count(old)}')
+          text = text.replace(old, "        $items = self::normalize_instagram_items($body['data']);", 1)
+
+          anchor = "    public static function instagram_refresh() {\n"
+          helper_lines = [
+              "    private static function normalize_instagram_items($data) {",
+              "        $items = [];",
+              "        foreach ((array)$data as $item) {",
+              "            if (!is_array($item) || empty($item['permalink'])) continue;",
+              "            $image = ($item['media_type'] ?? '') === 'VIDEO' ? ($item['thumbnail_url'] ?? '') : ($item['media_url'] ?? '');",
+              "            if ($image === '') continue;",
+              "            $items[] = [",
+              "                'id' => sanitize_text_field((string)($item['id'] ?? '')),",
+              "                'caption' => sanitize_textarea_field((string)($item['caption'] ?? '')),",
+              "                'media_type' => sanitize_key((string)($item['media_type'] ?? 'IMAGE')),",
+              "                'image_url' => esc_url_raw($image),",
+              "                'permalink' => esc_url_raw((string)$item['permalink']),",
+              "                'timestamp' => sanitize_text_field((string)($item['timestamp'] ?? '')),",
+              "            ];",
+              "            if (count($items) >= 12) break;",
+              "        }",
+              "        return $items;",
+              "    }",
+              "",
+              "    public static function instagram_refresh() {",
+          ]
+          helper = '\n'.join(helper_lines) + '\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'unexpected refresh anchor count: {text.count(anchor)}')
+          text = text.replace(anchor, helper, 1)
+
+          if text.count('private static function normalize_instagram_items($data)') != 1:
+              raise SystemExit('normalization helper count mismatch')
+          if text.count("$items = self::normalize_instagram_items($body['data']);") != 1:
+              raise SystemExit('normalization helper call mismatch')
+          if text.count("foreach ((array)$body['data'] as $item)") != 0:
+              raise SystemExit('old inline normalization loop remains')
+
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-normalize-instagram-items.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Extract Instagram item normalization"
+          git push origin HEAD:agent/normalize-instagram-items
