@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.87
+ * Version: 3.2.88
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.87';
+    const VERSION = '3.2.88';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -38,16 +38,21 @@ final class Garden_Opening_Status_V3 {
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_permanent_guide_schema'], 20);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_multilingual_schema'], 30);
         add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_japanese_home_schema'], 35);
+        add_filter('aioseo_schema_output', [__CLASS__, 'filter_aioseo_schedule_index_schema'], 36);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_multilingual_title'], 100);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_multilingual_description'], 100);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_japanese_home_title'], 105);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_japanese_home_description'], 105);
+        add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_schedule_index_title'], 106);
+        add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_schedule_index_description'], 106);
         add_filter('aioseo_title', [__CLASS__, 'filter_aioseo_event_page_title'], 110);
         add_filter('aioseo_description', [__CLASS__, 'filter_aioseo_event_page_description'], 110);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_multilingual_facebook_tags'], 100);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_multilingual_twitter_tags'], 100);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_japanese_home_facebook_tags'], 105);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_japanese_home_twitter_tags'], 105);
+        add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_schedule_index_facebook_tags'], 106);
+        add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_schedule_index_twitter_tags'], 106);
         add_filter('aioseo_facebook_tags', [__CLASS__, 'filter_aioseo_event_page_facebook_tags'], 110);
         add_filter('aioseo_twitter_tags', [__CLASS__, 'filter_aioseo_event_page_twitter_tags'], 110);
         add_action('wp_head', [__CLASS__, 'output_multilingual_seo_marker'], 1);
@@ -118,7 +123,8 @@ final class Garden_Opening_Status_V3 {
         if (is_admin()) return;
         $language = self::information_page_language();
         $is_event_page = self::current_event_page_season() !== '';
-        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return;
+        $is_schedule_index = is_page('schedule');
+        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page && !$is_schedule_index) return;
         ob_start([__CLASS__, 'filter_multilingual_theme_og_output']);
     }
 
@@ -127,7 +133,8 @@ final class Garden_Opening_Status_V3 {
 
         $language = self::information_page_language();
         $is_event_page = self::current_event_page_season() !== '';
-        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page) return $html;
+        $is_schedule_index = is_page('schedule');
+        if ($language !== 'ja' && $language !== 'en' && $language !== 'zh-Hant' && !$is_event_page && !$is_schedule_index) return $html;
 
         $aioseo_marker = '<!-- All in One SEO';
         $marker_pos = stripos($html, $aioseo_marker);
@@ -259,6 +266,67 @@ final class Garden_Opening_Status_V3 {
         $seo = self::japanese_home_seo_config();
         if (!$seo || !is_array($graphs)) return $graphs;
         self::localize_aioseo_japanese_home_schema_node($graphs, $seo);
+        return $graphs;
+    }
+
+    /** Search metadata for the fixed seasonal schedule index page. */
+    private static function schedule_index_seo_config() {
+        if (!is_page('schedule')) return [];
+        return [
+            'title' => '東京・上野で楽しむ季節の花｜春の牡丹・秋のダリア・冬の牡丹',
+            'description' => '東京・上野の上野東照宮ぼたん苑では、春の牡丹、秋のダリア、冬咲き牡丹を季節ごとに公開しています。各会期の開催情報、開苑時期、詳細をご案内します。',
+        ];
+    }
+
+    public static function filter_aioseo_schedule_index_title($title) {
+        $seo = self::schedule_index_seo_config();
+        return !empty($seo['title']) ? $seo['title'] : $title;
+    }
+
+    public static function filter_aioseo_schedule_index_description($description) {
+        $seo = self::schedule_index_seo_config();
+        return !empty($seo['description']) ? $seo['description'] : $description;
+    }
+
+    public static function filter_aioseo_schedule_index_facebook_tags($tags) {
+        $seo = self::schedule_index_seo_config();
+        if (!$seo || !is_array($tags)) return $tags;
+        $tags['og:locale'] = 'ja_JP';
+        $tags['og:url'] = home_url('/schedule/');
+        $tags['og:title'] = $seo['title'];
+        $tags['og:description'] = $seo['description'];
+        return $tags;
+    }
+
+    public static function filter_aioseo_schedule_index_twitter_tags($tags) {
+        $seo = self::schedule_index_seo_config();
+        if (!$seo || !is_array($tags)) return $tags;
+        $tags['twitter:title'] = $seo['title'];
+        $tags['twitter:description'] = $seo['description'];
+        return $tags;
+    }
+
+    private static function localize_aioseo_schedule_index_schema_node(&$node, $seo) {
+        if (!is_array($node)) return;
+        $types = [];
+        if (isset($node['@type'])) {
+            $types = is_array($node['@type']) ? $node['@type'] : [$node['@type']];
+        }
+        if (in_array('WebPage', $types, true) || in_array('CollectionPage', $types, true)) {
+            $node['name'] = $seo['title'];
+            $node['description'] = $seo['description'];
+            $node['inLanguage'] = 'ja';
+        }
+        foreach ($node as &$child) {
+            if (is_array($child)) self::localize_aioseo_schedule_index_schema_node($child, $seo);
+        }
+        unset($child);
+    }
+
+    public static function filter_aioseo_schedule_index_schema($graphs) {
+        $seo = self::schedule_index_seo_config();
+        if (!$seo || !is_array($graphs)) return $graphs;
+        self::localize_aioseo_schedule_index_schema_node($graphs, $seo);
         return $graphs;
     }
 
@@ -409,7 +477,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.87 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.88 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
