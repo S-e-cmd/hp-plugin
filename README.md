@@ -9,6 +9,7 @@ WordPressサイト向けの独自プラグインを管理するリポジトリ�
 - 開催状況表示プラグイン
 - 共通画像トリミング
 - モバイル表示管理
+- サイト端末プレビュー
 - 今後追加するサイト改修用プラグイン
 
 ## ディレクトリ構成
@@ -17,7 +18,8 @@ WordPressサイト向けの独自プラグインを管理するリポジトリ�
 plugins/
 ├─ garden-opening-status/
 ├─ universal-image-cropper/
-└─ mobile-layout-manager/
+├─ mobile-layout-manager/
+└─ site-device-preview/
 ```
 
 各プラグインは、WordPressの `wp-content/plugins/` にそのまま配置できるフォルダ構成で管理します。
