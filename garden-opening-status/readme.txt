@@ -1,3 +1,12 @@
+開催情報・開催状況管理 3.2.79
+
+3.2.79:
+- English / ChineseページのSEO title、OG locale、OG/Twitter title・imageを言語別に補正
+- テーマとAIOSEOで重複していた主要OG出力を外国語ページでは1セットへ整理
+- AIOSEO WebPage schemaのname / inLanguageを英語・繁体字へ補正
+- AIOSEO Breadcrumbのホーム・ページ名を各言語へ補正
+- canonical、hreflang、既存TouristAttraction schemaは変更なし
+
 開催情報・開催状況管理 3.2.78
 
 3.2.78:
