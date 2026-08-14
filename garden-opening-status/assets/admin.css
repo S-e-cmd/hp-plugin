@@ -73,8 +73,6 @@
 .gos3-event-info-preview .gos-event-info__heading{font-size:18px}
 .gos3-event-info-preview .gos-event-info__row{grid-template-columns:7em 1fr}
 
-.gos3-preview-mode-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.gos3-preview-mode-row .gos3-segment{margin-bottom:12px}
 .gos3-overview-preview{margin:auto;border:1px solid #aaa;background:#e9e9e9;overflow:auto;box-sizing:border-box;transition:width .2s,height .2s}
 .gos3-overview-preview.desktop{width:100%;height:clamp(360px,calc(100vh - 300px),650px)}
 .gos3-overview-preview.mobile{width:390px;max-width:100%;height:clamp(460px,calc(100vh - 300px),720px);border:8px solid #222;border-radius:24px}
