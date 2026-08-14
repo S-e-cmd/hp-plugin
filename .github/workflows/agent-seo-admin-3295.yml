@@ -1,0 +1,36 @@
+name: Apply SEO admin settings 3.2.95
+on:
+  push:
+    branches: [feature/seo-admin-settings-3295]
+    paths: ['.github/workflows/agent-seo-admin-3295.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/seo-admin-settings-3295
+      - name: Apply patch
+        run: git apply .github/agent-seo-admin-3295.patch
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.95' garden-opening-status/garden-opening-status.php
+          grep -F '<h2>SEO設定</h2>' garden-opening-status/garden-opening-status.php
+          grep -F 'Peonies, Dahlias & Seasonal Flowers in Tokyo' garden-opening-status/garden-opening-status.php
+          grep -F '東京上野賞牡丹、大麗花與四季花卉' garden-opening-status/garden-opening-status.php
+          grep -F "'seo' => self::seo_defaults()" garden-opening-status/garden-opening-status.php
+          grep -F "self::seo_value($season, 'confirmed_title')" garden-opening-status/garden-opening-status.php
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m 'Add editable SEO settings in 3.2.95'
+          git push origin HEAD:feature/seo-admin-settings-3295
