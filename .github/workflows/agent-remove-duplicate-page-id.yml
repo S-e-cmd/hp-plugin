@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'Add guarded duplicate page ID cleanup workflow'
+    if: github.event.head_commit.message == 'Fix guarded duplicate page ID cleanup workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,19 +23,23 @@ jobs:
           if texts[0] != texts[1]:
               raise SystemExit('duplicate PHP copies differ before cleanup')
           text=texts[0]
-          old="""            if ($description_parts) {
-                $item['description'] = implode(' ', $description_parts);
-            }
-
-            $page_id = self::resolve_event_page_id($event, $season);
-            if ($page_id > 0) {
-"""
-          new="""            if ($description_parts) {
-                $item['description'] = implode(' ', $description_parts);
-            }
-
-            if ($page_id > 0) {
-"""
+          old='\n'.join([
+              '            if ($description_parts) {',
+              "                $item['description'] = implode(' ', $description_parts);",
+              '            }',
+              '',
+              '            $page_id = self::resolve_event_page_id($event, $season);',
+              '            if ($page_id > 0) {',
+              '',
+          ])
+          new='\n'.join([
+              '            if ($description_parts) {',
+              "                $item['description'] = implode(' ', $description_parts);",
+              '            }',
+              '',
+              '            if ($page_id > 0) {',
+              '',
+          ])
           if text.count(old) != 1:
               raise SystemExit(f'unexpected target block count: {text.count(old)}')
           text=text.replace(old,new,1)
