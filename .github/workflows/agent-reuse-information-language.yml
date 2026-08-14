@@ -1,0 +1,63 @@
+name: Temporary guarded information language reuse
+
+on:
+  push:
+    branches:
+      - agent/reuse-information-language
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded information language reuse workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse information page language
+        shell: python
+        run: |
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+          desc_anchor = "    public static function filter_description_output($html) {\n        if (!is_string($html) || $html === '') return $html;\n\n        if (is_page('english')) {"
+          desc_replacement = "    public static function filter_description_output($html) {\n        if (!is_string($html) || $html === '') return $html;\n\n        $language = self::information_page_language();\n        if ($language === 'en') {"
+          if text.count(desc_anchor) != 1:
+              raise SystemExit(f'unexpected description anchor count: {text.count(desc_anchor)}')
+          text = text.replace(desc_anchor, desc_replacement, 1)
+          desc_zh = "        } elseif (is_page('chinese')) {"
+          if text.count(desc_zh) < 1:
+              raise SystemExit('missing chinese description branch')
+          text = text.replace(desc_zh, "        } elseif ($language === 'zh-Hant') {", 1)
+
+          fallback_anchor = "    public static function multilingual_event_info_fallback() {\n        if (is_admin() || (!is_page('english') && !is_page('chinese'))) return;\n        $lang = is_page('chinese') ? 'zh-Hant' : 'en';"
+          fallback_replacement = "    public static function multilingual_event_info_fallback() {\n        $lang = self::information_page_language();\n        if (is_admin() || !in_array($lang, ['en', 'zh-Hant'], true)) return;"
+          if text.count(fallback_anchor) != 1:
+              raise SystemExit(f'unexpected multilingual fallback anchor count: {text.count(fallback_anchor)}')
+          text = text.replace(fallback_anchor, fallback_replacement, 1)
+
+          insta_anchor = "        $auto_multilingual = is_page(['english', 'chinese']);\n        $multilingual_label = is_page('chinese') ? '在 Instagram 查看更多' : 'View more on Instagram';"
+          insta_replacement = "        $page_language = self::information_page_language();\n        $auto_multilingual = in_array($page_language, ['en', 'zh-Hant'], true);\n        $multilingual_label = $page_language === 'zh-Hant' ? '在 Instagram 查看更多' : 'View more on Instagram';"
+          if text.count(insta_anchor) != 1:
+              raise SystemExit(f'unexpected Instagram language anchor count: {text.count(insta_anchor)}')
+          text = text.replace(insta_anchor, insta_replacement, 1)
+
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-reuse-information-language.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Reuse information page language checks"
+          git push origin HEAD:agent/reuse-information-language
