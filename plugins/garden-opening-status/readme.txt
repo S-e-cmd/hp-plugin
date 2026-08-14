@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.94
+
+3.2.94:
+- 日本語お問い合わせページ /contact/ の表示本文・フォームを変更せず、title / descriptionを「お問い合わせ・入苑・取材・各種相談」文脈へ調整
+- /contact/ のOG / Twitter / AIOSEO WebPage・ContactPage schemaを同じtitle / descriptionへ同期
+- /contact/ の旧テーマOGを除去しAIOSEOをheadメタ情報の正本に統一
+- トップ、入苑案内、アクセス、会期一覧、春・秋・冬、英語・繁体字、本文・フォーム・見出し・レイアウトには変更なし
+
 開催情報・開催状況管理 3.2.93
 
 3.2.93:
