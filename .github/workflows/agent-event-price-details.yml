@@ -1,0 +1,58 @@
+name: Temporary guarded event price details cleanup
+
+on:
+  push:
+    branches:
+      - agent/centralize-event-price-details
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded event price details cleanup workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Centralize event price details fallback
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+          anchor = "    private static function event_page_output_values($season) {\n"
+          helper = "    private static function event_price_details($event) {\n        $price = trim((string)($event['price_details'] ?? ''));\n        if ($price === '') $price = trim((string)($event['price'] ?? ''));\n        return $price;\n    }\n\n    private static function event_page_output_values($season) {\n"
+          if text.count(anchor) != 1:
+              raise SystemExit(f'unexpected event_page_output_values anchor count: {text.count(anchor)}')
+          text = text.replace(anchor, helper, 1)
+          old_page = "        $price = trim((string)($event['price_details'] ?? ''));\n        if ($price === '') $price = trim((string)($event['price'] ?? ''));"
+          if text.count(old_page) != 1:
+              raise SystemExit(f'unexpected page price fallback count: {text.count(old_page)}')
+          text = text.replace(old_page, "        $price = self::event_price_details($event);", 1)
+          old_shortcode = "        $price_details = trim((string)($event['price_details'] ?? ''));\n        if ($price_details === '') $price_details = trim((string)($event['price'] ?? ''));"
+          if text.count(old_shortcode) != 1:
+              raise SystemExit(f'unexpected shortcode price fallback count: {text.count(old_shortcode)}')
+          text = text.replace(old_shortcode, "        $price_details = self::event_price_details($event);", 1)
+          if text.count('private static function event_price_details($event)') != 1:
+              raise SystemExit('event_price_details helper count mismatch')
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-event-price-details.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Centralize event price details fallback"
+          git push origin HEAD:agent/centralize-event-price-details
