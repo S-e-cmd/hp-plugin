@@ -1,3 +1,11 @@
+開催情報・開催状況管理 3.2.82
+
+3.2.82:
+- English / Chinese でテーマがAIOSEOより前に出す重複OGタグだけを除去
+- AIOSEOのtitle / description / OG / Twitter / schema出力は変更なし
+- OGタグの再挿入は行わず、AIOSEOを外国語ページのOG正本に統一
+- 日本語ページ、canonical、hreflang、既存TouristAttraction schemaは変更なし
+
 開催情報・開催状況管理 3.2.81
 
 3.2.81:
