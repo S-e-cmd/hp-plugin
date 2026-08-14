@@ -1,0 +1,83 @@
+name: Temporary guarded Instagram hook registration cleanup
+
+on:
+  push:
+    branches:
+      - agent/register-instagram-hooks
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Add guarded Instagram hook registration cleanup workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Instagram hook registration seam
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          paths = [Path('garden-opening-status/garden-opening-status.php'), Path('plugins/garden-opening-status/garden-opening-status.php')]
+          texts = [p.read_text(encoding='utf-8') for p in paths]
+          if texts[0] != texts[1]:
+              raise SystemExit('duplicate PHP copies differ before cleanup')
+          text = texts[0]
+
+          old_lines = [
+              "        add_action('admin_menu', [__CLASS__, 'instagram_admin_menu']);",
+              "        add_action('admin_post_gos_instagram_save', [__CLASS__, 'instagram_save']);",
+              "        add_action('admin_post_gos_instagram_refresh', [__CLASS__, 'instagram_refresh_action']);",
+              "        add_action('gos_instagram_cron', [__CLASS__, 'instagram_refresh']);",
+              "        add_filter('cron_schedules', [__CLASS__, 'instagram_cron_schedules']);",
+              "        add_shortcode('garden_instagram_gallery', [__CLASS__, 'shortcode_instagram_gallery']);",
+          ]
+          old = '\n'.join(old_lines)
+          if text.count(old) != 1:
+              raise SystemExit(f'unexpected Instagram hook block count: {text.count(old)}')
+          text = text.replace(old, "        self::register_instagram_hooks();", 1)
+
+          anchor = "    private static function information_page_language() {\n"
+          helper_lines = [
+              "    private static function register_instagram_hooks() {",
+              "        add_action('admin_menu', [__CLASS__, 'instagram_admin_menu']);",
+              "        add_action('admin_post_gos_instagram_save', [__CLASS__, 'instagram_save']);",
+              "        add_action('admin_post_gos_instagram_refresh', [__CLASS__, 'instagram_refresh_action']);",
+              "        add_action('gos_instagram_cron', [__CLASS__, 'instagram_refresh']);",
+              "        add_filter('cron_schedules', [__CLASS__, 'instagram_cron_schedules']);",
+              "        add_shortcode('garden_instagram_gallery', [__CLASS__, 'shortcode_instagram_gallery']);",
+              "    }",
+              "",
+              "    private static function information_page_language() {",
+          ]
+          helper = '\n'.join(helper_lines) + '\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'unexpected helper anchor count: {text.count(anchor)}')
+          text = text.replace(anchor, helper, 1)
+
+          if text.count('self::register_instagram_hooks();') != 1:
+              raise SystemExit('register_instagram_hooks call count mismatch')
+          if text.count('private static function register_instagram_hooks()') != 1:
+              raise SystemExit('register_instagram_hooks helper count mismatch')
+          for line in old_lines:
+              if text.count(line) != 1:
+                  raise SystemExit(f'Instagram registration line count changed unexpectedly: {line} -> {text.count(line)}')
+
+          for p in paths:
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate PHP and duplicate copies
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git diff --check
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/agent-register-instagram-hooks.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          git commit -m "Extract Instagram hook registration seam"
+          git push origin HEAD:agent/register-instagram-hooks
