@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.95
+ * Version: 3.2.96
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.95';
+    const VERSION = '3.2.96';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -708,7 +708,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.95 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.96 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -3707,6 +3707,7 @@ final class Garden_Opening_Status_V3 {
         .gos-permanent-guide-card>a{display:inline-block;color:inherit!important;font-size:17px;font-weight:600;text-decoration:none!important}
         .gos-permanent-guide-card>a::after{content:' ›';font-weight:400}
         .gos-permanent-guide-card>a:hover{text-decoration:underline!important}
+        .gos-permanent-guide-card--news{width:100%;max-width:none;margin:0 0 28px}
         .gos-permanent-guide-page .entry-meta,.gos-permanent-guide-page .post-meta,.gos-permanent-guide-page .article-meta,.gos-permanent-guide-page .article-date,.gos-permanent-guide-page .post-date,.gos-permanent-guide-page .single-post-navigation,.gos-permanent-guide-page .post-navigation,.gos-permanent-guide-page .nav-links,.gos-permanent-guide-page .sharedaddy,.gos-permanent-guide-page .share-buttons{display:none!important}
         .gos-permanent-guide-page .gos-permanent-guide__modified{display:block!important;margin:34px 0 0!important;padding-top:12px!important;border-top:1px solid #ddd!important;color:#777!important;font-size:12px!important;text-align:right!important}
         @media(max-width:600px){.gos-permanent-guide-card{width:calc(100% - 32px);margin:16px auto 24px;padding:14px 16px}.gos-permanent-guide-card>a{font-size:15px}}
@@ -3717,6 +3718,7 @@ final class Garden_Opening_Status_V3 {
           var cardHtml=<?php echo wp_json_encode($card, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
           var isGuide=<?php echo $is_guide ? 'true' : 'false'; ?>;
           var showCard=<?php echo $show_card ? 'true' : 'false'; ?>;
+          var isNewsArchive=<?php echo (!$is_guide && ($path === 'news' || is_post_type_archive() || is_home())) ? 'true' : 'false'; ?>;
           var excludeFromList=<?php echo !empty($config['exclude_from_news_list']) ? 'true' : 'false'; ?>;
           function text(el){return String((el&&el.textContent)||'').replace(/\s+/g,'').trim()}
           function normalizedUrl(value){
@@ -3745,6 +3747,29 @@ final class Garden_Opening_Status_V3 {
           }
           function insertCard(){
             if(!showCard || document.querySelector('.gos-permanent-guide-card'))return;
+
+            if(isNewsArchive){
+              var firstNewsItem=null;
+              Array.prototype.some.call(document.querySelectorAll('article,.article02,.news-item,.post-item,.archive-item'),function(item){
+                if(item.closest('header,nav,footer,.gos-permanent-guide-card'))return false;
+                var hasLink=!!item.querySelector('a[href]');
+                var hasDate=!!item.querySelector('time,.entry-date,.post-date,.article-date') || /\d{4}[.\/-]\d{1,2}[.\/-]\d{1,2}/.test(item.textContent||'');
+                if(!hasLink || !hasDate)return false;
+                firstNewsItem=item;
+                return true;
+              });
+              if(firstNewsItem && firstNewsItem.parentNode){
+                var holder=document.createElement('div');
+                holder.innerHTML=cardHtml;
+                var newsCard=holder.firstElementChild;
+                if(newsCard){
+                  newsCard.classList.add('gos-permanent-guide-card--news');
+                  firstNewsItem.parentNode.insertBefore(newsCard,firstNewsItem);
+                  return;
+                }
+              }
+            }
+
             var heading=null;
             Array.prototype.some.call(document.querySelectorAll('h1,h2,h3,h4'),function(h){if(text(h)==='お知らせ'){heading=h;return true}return false});
             if(!heading)return;
