@@ -13,10 +13,12 @@ if (!defined('ABSPATH')) exit;
 final class GOS_Slider_Admin {
     const PAGE = 'garden-opening-status-slider';
     const NONCE = 'gos_slider_save';
+    const PREVIEW_NONCE = 'gos_slider_preview';
 
     public static function register_hooks() {
         add_action('admin_menu', [__CLASS__, 'admin_menu'], 20);
         add_action('admin_post_gos_slider_save', [__CLASS__, 'save']);
+        add_action('wp_ajax_gos_slider_preview_draft', [__CLASS__, 'ajax_save_preview_draft']);
         add_action('admin_enqueue_scripts', [__CLASS__, 'admin_assets']);
         add_action('admin_footer', [__CLASS__, 'legacy_screen_handoff']);
     }
@@ -68,12 +70,14 @@ final class GOS_Slider_Admin {
                 </div>
 
                 <?php submit_button('スライダー設定を保存'); ?>
+                <button type="button" class="button button-secondary" id="gos-slider-preview-button">編集中の設定でスマホプレビュー</button>
             </form>
         </div>
 
         <script>
         (function(){
             'use strict';
+            var form=document.getElementById('gos-slider-form');
 
             function syncRange(root){
                 root.querySelectorAll('[data-gos-range]').forEach(function(range){
@@ -138,6 +142,22 @@ final class GOS_Slider_Admin {
                 });
             });
 
+            var previewButton=document.getElementById('gos-slider-preview-button');
+            if(previewButton&&form)previewButton.addEventListener('click',function(){
+                var data=new FormData(form);
+                data.set('action','gos_slider_preview_draft');
+                data.set('nonce',<?php echo wp_json_encode(wp_create_nonce(self::PREVIEW_NONCE)); ?>);
+                var win=window.open('about:blank','gosSliderMobilePreview');
+                if(win)win.document.write('<p style="font-family:sans-serif;padding:20px">プレビューを準備しています…</p>');
+                fetch(ajaxurl,{method:'POST',credentials:'same-origin',body:data})
+                    .then(function(r){return r.json();})
+                    .then(function(res){
+                        if(!res||!res.success){if(win)win.close();alert('プレビュー設定を保存できませんでした。');return;}
+                        var url=<?php echo wp_json_encode(admin_url('admin.php?page=' . GOS_Mobile_Layout::PREVIEW_PAGE)); ?>+'&mlm_draft='+Date.now();
+                        if(win)win.location=url;else window.location=url;
+                    });
+            });
+
             syncRange(document);
         })();
         </script>
@@ -195,12 +215,50 @@ final class GOS_Slider_Admin {
         <?php
     }
 
+    public static function ajax_save_preview_draft() {
+        check_ajax_referer(self::PREVIEW_NONCE, 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません。'], 403);
+
+        $input = wp_unslash($_POST);
+        $slides = isset($input['slides']) && is_array($input['slides']) ? $input['slides'] : [];
+        $theme = get_option('dp_options', []);
+        $mobile = get_option('mlm_options', []);
+        $theme = is_array($theme) ? $theme : [];
+        $mobile = is_array($mobile) ? $mobile : [];
+        $mobile_slider = isset($mobile['slider']) && is_array($mobile['slider']) ? $mobile['slider'] : [];
+
+        for ($slot = 1; $slot <= 3; $slot++) {
+            $row = isset($slides[$slot]) && is_array($slides[$slot]) ? $slides[$slot] : [];
+            $theme['slider_image' . $slot] = absint($row['pc_image_id'] ?? 0);
+            $mobile_slider[$slot] = [
+                'image_id' => absint($row['mobile_image_id'] ?? 0),
+                'position_x' => self::bounded_int($row['position_x'] ?? 50, 0, 100),
+                'position_y' => self::bounded_int($row['position_y'] ?? 50, 0, 100),
+            ];
+        }
+
+        $mobile['slider'] = $mobile_slider;
+        $mobile['top_enabled'] = empty($input['top_enabled']) ? 0 : 1;
+        $mobile['breakpoint'] = self::bounded_int($input['breakpoint'] ?? 767, 480, 1200);
+
+        $user_id = get_current_user_id();
+        update_user_meta($user_id, '_gos_slider_preview_theme', $theme);
+        update_user_meta($user_id, '_mlm_preview_draft', $mobile);
+        wp_send_json_success(['message' => 'プレビューへ一時反映しました。']);
+    }
+
     public static function save() {
         if (!current_user_can('manage_options')) wp_die('権限がありません。');
         check_admin_referer(self::NONCE);
         GOS_Slider_Settings::save(wp_unslash($_POST));
+        delete_user_meta(get_current_user_id(), '_gos_slider_preview_theme');
+        delete_user_meta(get_current_user_id(), '_mlm_preview_draft');
         wp_safe_redirect(add_query_arg(['page' => self::PAGE, 'updated' => 1], admin_url('admin.php')));
         exit;
+    }
+
+    private static function bounded_int($value, $min, $max) {
+        return max($min, min($max, (int)$value));
     }
 
     public static function legacy_screen_handoff() {
