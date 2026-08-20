@@ -14,3 +14,4 @@ require_once __DIR__ . '/class-gos-legacy-slider-source.php';
 require_once __DIR__ . '/class-gos-slider-integration-state.php';
 require_once __DIR__ . '/class-gos-slider-integration-guard.php';
 require_once __DIR__ . '/class-gos-slider-integration-diagnostics.php';
+require_once __DIR__ . '/class-gos-slider-integration.php';
