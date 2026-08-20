@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.99
+ * Version: 3.3.0
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.99';
+    const VERSION = '3.3.0';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -86,6 +86,7 @@ final class Garden_Opening_Status_V3 {
         add_action('wp_footer', [__CLASS__, 'multilingual_event_info_fallback'], 98);
         add_action('wp_footer', [__CLASS__, 'event_page_preview_fallback'], 100);
         add_action('wp_footer', [__CLASS__, 'seasonal_mobile_bottom_spacer'], 101);
+        add_action('wp_footer', [__CLASS__, 'seasonal_confirmed_date_wrap'], 103);
         add_action('wp_head', [__CLASS__, 'boot_hide'], 0);
         add_action('wp_head', [__CLASS__, 'front_styles'], 99);
         add_action('wp_footer', [__CLASS__, 'front_script'], 99);
@@ -709,7 +710,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.99 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.3.0 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -2420,6 +2421,49 @@ final class Garden_Opening_Status_V3 {
             var block=holder.firstElementChild;
             if(!block) return;
             target.insertBefore(block,target.firstChild);
+        })();
+        </script>
+        <?php
+    }
+
+    public static function seasonal_confirmed_date_wrap() {
+        $season = self::current_event_page_season();
+        if (is_admin() || $season === '') return;
+
+        $options = self::options(false);
+        $event = self::event_from_options($options, $season);
+        if (sanitize_key((string)($event['date_display_mode'] ?? 'usual')) !== 'confirmed') return;
+        if (!self::event_released($event, self::now())) return;
+
+        $start_date = trim((string)($event['start'] ?? ''));
+        $end_date = trim((string)($event['end'] ?? ''));
+        if ($start_date === '' || $end_date === '') return;
+
+        $start_text = self::format_date_with_weekday($start_date) . '～';
+        $end_text = self::format_date_with_weekday($end_date);
+        $range_text = $start_text . $end_text;
+        ?>
+        <script id="gos-seasonal-confirmed-date-wrap">
+        (function(){
+          var range=<?php echo wp_json_encode($range_text, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+          var start=<?php echo wp_json_encode($start_text, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+          var end=<?php echo wp_json_encode($end_text, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+          if(!range||document.querySelector('.gos-event-page-info__confirmed-date-start'))return;
+          var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(node){
+            if(!node.nodeValue||node.nodeValue.indexOf(range)===-1)return NodeFilter.FILTER_REJECT;
+            var p=node.parentElement;
+            if(!p||/^(SCRIPT|STYLE|TEXTAREA|CODE|PRE)$/i.test(p.tagName))return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          }});
+          var node=walker.nextNode();
+          if(!node)return;
+          var text=node.nodeValue,pos=text.indexOf(range);
+          var frag=document.createDocumentFragment();
+          if(pos>0)frag.appendChild(document.createTextNode(text.slice(0,pos)));
+          var a=document.createElement('span');a.className='gos-event-page-info__confirmed-date-start';a.textContent=start;frag.appendChild(a);
+          var b=document.createElement('span');b.className='gos-event-page-info__confirmed-date-end';b.textContent=end;frag.appendChild(b);
+          if(pos+range.length<text.length)frag.appendChild(document.createTextNode(text.slice(pos+range.length)));
+          node.parentNode.replaceChild(frag,node);
         })();
         </script>
         <?php
