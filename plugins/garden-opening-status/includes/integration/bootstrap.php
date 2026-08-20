@@ -17,3 +17,4 @@ require_once __DIR__ . '/class-gos-slider-integration-diagnostics.php';
 require_once __DIR__ . '/class-gos-slider-integration-contract.php';
 require_once __DIR__ . '/class-gos-slider-integration.php';
 require_once __DIR__ . '/class-gos-slider-integration-view.php';
+require_once __DIR__ . '/class-gos-slider-integration-readiness.php';
