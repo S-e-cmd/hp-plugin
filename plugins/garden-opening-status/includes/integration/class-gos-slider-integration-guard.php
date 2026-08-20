@@ -37,4 +37,19 @@ final class GOS_Slider_Integration_Guard {
     public static function is_read_only() {
         return true;
     }
+
+    /** @return bool */
+    public static function writes_allowed() {
+        return false;
+    }
+
+    /** @return bool */
+    public static function frontend_takeover_allowed() {
+        return false;
+    }
+
+    /** @return bool */
+    public static function migration_allowed() {
+        return false;
+    }
 }
