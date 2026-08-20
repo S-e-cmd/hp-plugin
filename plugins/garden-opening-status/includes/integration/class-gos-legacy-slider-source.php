@@ -1,9 +1,9 @@
 <?php
 /**
- * Read-only boundary for the current theme/mobile slider settings.
+ * Shared source for current theme/mobile slider settings.
  *
- * Integration preparation only. This file is intentionally not loaded by the
- * plugin bootstrap yet, so adding it does not change the current runtime.
+ * Uses the existing dp_options / mlm_options contracts and, only during an
+ * authenticated mobile preview, overlays the current user's unsaved drafts.
  *
  * @package Garden_Opening_Status
  */
@@ -11,21 +11,20 @@
 if (!defined('ABSPATH')) exit;
 
 final class GOS_Legacy_Slider_Source {
-    /**
-     * Return the current top-slider state without modifying either source.
-     *
-     * PC images remain owned by the theme's dp_options.
-     * Mobile images/positions remain owned by mobile-layout-manager's
-     * mlm_options until an explicit migration is implemented.
-     *
-     * @return array
-     */
     public static function read() {
         $theme  = get_option('dp_options', []);
         $mobile = get_option('mlm_options', []);
 
         $theme  = is_array($theme) ? $theme : [];
         $mobile = is_array($mobile) ? $mobile : [];
+
+        if (!empty($_GET['mlm_preview']) && is_user_logged_in()) {
+            $user_id = get_current_user_id();
+            $theme_draft = get_user_meta($user_id, '_gos_slider_preview_theme', true);
+            $mobile_draft = get_user_meta($user_id, '_mlm_preview_draft', true);
+            if (is_array($theme_draft)) $theme = array_replace_recursive($theme, $theme_draft);
+            if (is_array($mobile_draft)) $mobile = array_replace_recursive($mobile, $mobile_draft);
+        }
 
         $mobile_slider = isset($mobile['slider']) && is_array($mobile['slider'])
             ? $mobile['slider']
