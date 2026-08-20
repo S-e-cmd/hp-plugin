@@ -1,0 +1,33 @@
+name: Apply mobile event spacing 3.2.97
+on:
+  push:
+    branches: [fix/mobile-event-bottom-spacing-3297]
+    paths: ['.github/workflows/agent-mobile-spacing-3297.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mobile-event-bottom-spacing-3297
+      - name: Apply patch
+        run: python3 .github/agent-mobile-spacing-3297.py
+      - name: Validate
+        run: |
+          php -l garden-opening-status/garden-opening-status.php
+          php -l plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/garden-opening-status.php plugins/garden-opening-status/garden-opening-status.php
+          cmp garden-opening-status/readme.txt plugins/garden-opening-status/readme.txt
+          git diff --check
+          grep -F 'Version: 3.2.97' garden-opening-status/garden-opening-status.php
+          grep -F "gos-seasonal-event-page" garden-opening-status/garden-opening-status.php
+          grep -F "padding-bottom:calc(76px + env(safe-area-inset-bottom, 0px))" garden-opening-status/garden-opening-status.php
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add garden-opening-status plugins/garden-opening-status
+          git commit -m 'Reserve mobile bottom nav space in 3.2.97'
+          git push origin HEAD:fix/mobile-event-bottom-spacing-3297
