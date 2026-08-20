@@ -23,6 +23,13 @@ final class GOS_Slider_Integration_Diagnostics {
         $renderable = 0;
         $mobile_overrides = 0;
 
+        if (empty($state['available'])) {
+            $issues[] = [
+                'code' => 'integration_state_unavailable',
+                'message' => '統合用の読み取り状態を取得できません。',
+            ];
+        }
+
         for ($slot = 1; $slot <= 3; $slot++) {
             $slide = isset($slides[$slot]) && is_array($slides[$slot]) ? $slides[$slot] : [];
             $pc = isset($slide['pc']) && is_array($slide['pc']) ? $slide['pc'] : [];
@@ -61,7 +68,7 @@ final class GOS_Slider_Integration_Diagnostics {
             'writes_allowed' => GOS_Slider_Integration_Guard::writes_allowed(),
             'frontend_takeover_allowed' => GOS_Slider_Integration_Guard::frontend_takeover_allowed(),
             'migration_allowed' => GOS_Slider_Integration_Guard::migration_allowed(),
-            'top_enabled' => !empty($state['top_enabled']),
+            'mobile_enabled' => !empty($state['mobile_enabled']),
             'breakpoint' => (int)($state['breakpoint'] ?? 767),
             'renderable_slides' => $renderable,
             'mobile_overrides' => $mobile_overrides,
