@@ -1,9 +1,10 @@
 <?php
 /**
- * Integration preparation bootstrap.
+ * Top-slider integration preparation bootstrap.
  *
- * This file only loads the read-only slider integration classes. It is not yet
- * required by the plugin main file, so current runtime behavior is unchanged.
+ * Keep the preparation seam deliberately small: read the two existing sources,
+ * normalize them once, and expose one stable read-only entry point.
+ * No hooks, writes, migration, or frontend takeover live here.
  *
  * @package Garden_Opening_Status
  */
@@ -12,9 +13,4 @@ if (!defined('ABSPATH')) exit;
 
 require_once __DIR__ . '/class-gos-legacy-slider-source.php';
 require_once __DIR__ . '/class-gos-slider-integration-state.php';
-require_once __DIR__ . '/class-gos-slider-integration-guard.php';
-require_once __DIR__ . '/class-gos-slider-integration-diagnostics.php';
-require_once __DIR__ . '/class-gos-slider-integration-contract.php';
 require_once __DIR__ . '/class-gos-slider-integration.php';
-require_once __DIR__ . '/class-gos-slider-integration-view.php';
-require_once __DIR__ . '/class-gos-slider-integration-readiness.php';
