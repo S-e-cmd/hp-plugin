@@ -1,9 +1,8 @@
 <?php
 /**
- * Normalized read-only state for the future top-slider integration.
+ * Normalized top-slider state shared by the integrated admin screen.
  *
- * Preparation only. This class does not save options, register hooks, render UI,
- * or disable the legacy mobile-layout-manager plugin.
+ * Existing option names remain unchanged during the handoff.
  *
  * @package Garden_Opening_Status
  */
@@ -11,18 +10,9 @@
 if (!defined('ABSPATH')) exit;
 
 final class GOS_Slider_Integration_State {
-    /**
-     * Build the normalized integration state from the current legacy sources.
-     *
-     * @return array
-     */
     public static function read() {
         if (!class_exists('GOS_Legacy_Slider_Source')) {
-            return [
-                'available' => false,
-                'reason'    => 'legacy_source_not_loaded',
-                'slides'    => [],
-            ];
+            return ['available' => false, 'slides' => []];
         }
 
         $legacy = GOS_Legacy_Slider_Source::read();
@@ -36,31 +26,24 @@ final class GOS_Slider_Integration_State {
                 'slot' => $slot,
                 'pc' => [
                     'image_id' => absint($row['pc_image_id'] ?? 0),
-                    'source'   => 'theme_dp_options',
-                    'editable' => false,
+                    'source' => 'dp_options',
                 ],
                 'mobile' => [
-                    'image_id'   => absint($row['mobile_image_id'] ?? 0),
+                    'image_id' => absint($row['mobile_image_id'] ?? 0),
                     'position_x' => self::bounded_int($row['position_x'] ?? 50, 0, 100),
                     'position_y' => self::bounded_int($row['position_y'] ?? 50, 0, 100),
-                    'source'     => 'mlm_options',
-                    'editable'   => false,
+                    'source' => 'mlm_options',
                 ],
                 'render_index' => absint($row['render_index'] ?? 0),
-                'renderable'   => !empty($row['pc_image_id']),
+                'renderable' => !empty($row['pc_image_id']),
             ];
         }
 
         return [
-            'available'        => true,
-            'mode'             => 'legacy_read_only',
-            'mobile_enabled'   => empty($legacy['top_enabled']) ? 0 : 1,
-            'breakpoint'       => self::bounded_int($legacy['breakpoint'] ?? 767, 480, 1200),
-            'pc_source'        => 'dp_options',
-            'mobile_source'    => 'mlm_options',
-            'writes_enabled'   => false,
-            'legacy_required'  => true,
-            'slides'           => $slides,
+            'available' => true,
+            'mobile_enabled' => empty($legacy['top_enabled']) ? 0 : 1,
+            'breakpoint' => self::bounded_int($legacy['breakpoint'] ?? 767, 480, 1200),
+            'slides' => $slides,
         ];
     }
 
