@@ -56,6 +56,24 @@ final class GOS_Slider_Integration {
     }
 
     /**
+     * Return whether the installation is ready for the first read-only
+     * connection from the main plugin.
+     *
+     * @return array
+     */
+    public static function readiness() {
+        if (!class_exists('GOS_Slider_Integration_Readiness')) {
+            return [
+                'phase' => 1,
+                'ready' => false,
+                'read_only' => true,
+                'blockers' => ['readiness_class_unavailable'],
+            ];
+        }
+        return GOS_Slider_Integration_Readiness::inspect();
+    }
+
+    /**
      * Preparation phase is intentionally read-only.
      *
      * @return bool
