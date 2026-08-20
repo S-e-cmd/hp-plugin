@@ -25,6 +25,21 @@ final class GOS_Slider_Integration {
     }
 
     /**
+     * Return the snapshot together with contract validation.
+     *
+     * This remains read-only and is intended for the first integration UI so it
+     * can refuse to proceed when the expected legacy/theme shape has drifted.
+     *
+     * @return array
+     */
+    public static function validated_snapshot() {
+        $snapshot = self::snapshot();
+        $snapshot['contract'] = GOS_Slider_Integration_Contract::schema();
+        $snapshot['validation'] = GOS_Slider_Integration_Contract::validate($snapshot);
+        return $snapshot;
+    }
+
+    /**
      * Preparation phase is intentionally read-only.
      *
      * @return bool
