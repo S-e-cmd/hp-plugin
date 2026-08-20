@@ -2,9 +2,8 @@
 /**
  * Integrated top-slider management screen.
  *
- * The existing option contracts are intentionally retained so the current
- * mobile-layout-manager frontend keeps rendering the same data during the
- * handoff.
+ * Existing dp_options / mlm_options contracts are retained so current saved
+ * settings continue to work without migration.
  *
  * @package Garden_Opening_Status
  */
@@ -46,7 +45,7 @@ final class GOS_Slider_Admin {
         ?>
         <div class="wrap gos-slider-admin">
             <h1>トップスライダー管理</h1>
-            <p>PC画像とスマホ画像を同じ画面で管理します。保存先は既存設定を維持しているため、公開中のスライダー表示方式は変わりません。</p>
+            <p>PC画像とスマホ画像を同じ画面で管理します。既存設定をそのまま引き継ぎます。</p>
 
             <?php if (!empty($_GET['updated'])): ?>
                 <div class="notice notice-success is-dismissible"><p>スライダー設定を保存しました。</p></div>
@@ -58,7 +57,7 @@ final class GOS_Slider_Admin {
 
                 <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin:18px 0 22px;padding:16px 18px;background:#fff;border:1px solid #dcdcde;">
                     <label><input type="checkbox" name="top_enabled" value="1" <?php checked(!empty($state['mobile_enabled'])); ?>> <strong>スマホ専用画像を使用</strong></label>
-                    <label>スマホ切替幅 <input type="number" min="480" max="1200" name="breakpoint" value="<?php echo esc_attr((int)($state['breakpoint'] ?? 767)); ?>" style="width:90px;"> px</label>
+                    <?php self::range_field('breakpoint', 'スマホ切替幅', (int)($state['breakpoint'] ?? 767), 480, 1200, 'px'); ?>
                 </div>
 
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;max-width:1280px;">
@@ -74,31 +73,88 @@ final class GOS_Slider_Admin {
 
         <script>
         (function(){
+            'use strict';
+
+            function syncRange(root){
+                root.querySelectorAll('[data-gos-range]').forEach(function(range){
+                    var number=range.parentNode.querySelector('[data-gos-number]');
+                    if(!number)return;
+                    range.addEventListener('input',function(){number.value=range.value;});
+                    number.addEventListener('input',function(){range.value=number.value;});
+                });
+            }
+
+            function applyMedia(target,item){
+                var input=document.getElementById(target);
+                var preview=document.querySelector('[data-gos-preview="'+target+'"]');
+                if(!input||!item||!item.id)return;
+                input.value=String(item.id);
+                var url=(item.sizes&&item.sizes.medium_large)?item.sizes.medium_large.url:((item.sizes&&item.sizes.medium)?item.sizes.medium.url:item.url);
+                if(preview&&url)preview.innerHTML='<img src="'+url+'" alt="" style="width:100%;height:180px;object-fit:cover;display:block;">';
+            }
+
             document.querySelectorAll('[data-gos-media-select]').forEach(function(button){
                 button.addEventListener('click',function(){
                     var target=button.getAttribute('data-gos-media-select');
-                    var input=document.getElementById(target);
-                    var preview=document.querySelector('[data-gos-preview="'+target+'"]');
-                    var frame=wp.media({title:'画像を選択',button:{text:'この画像を使用'},multiple:false});
+                    var frame=wp.media({title:'画像を選択',button:{text:'この画像を使用'},multiple:false,library:{type:'image'}});
+                    window.UIC_ACTIVE_MEDIA_FRAME=frame;
+                    var cropApplied=false;
+
+                    function applyModel(model){
+                        if(!model)return;
+                        var item=model.toJSON?model.toJSON():model;
+                        applyMedia(target,item);
+                    }
+
+                    window.UIC_CONTEXT={
+                        frame:frame,
+                        target:'gos-top-slider',
+                        onCropped:function(model){cropApplied=true;applyModel(model);}
+                    };
+                    frame.on('uic:cropped',function(model){if(!cropApplied){cropApplied=true;applyModel(model);}});
                     frame.on('select',function(){
-                        var item=frame.state().get('selection').first().toJSON();
-                        input.value=item.id||0;
-                        if(preview) preview.innerHTML=item.url?'<img src="'+item.url+'" alt="" style="width:100%;height:180px;object-fit:cover;display:block;">':'<span>未設定</span>';
+                        if(cropApplied)return;
+                        var selection=frame.state().get('selection');
+                        var first=selection&&selection.first();
+                        if(first)applyModel(first);
+                    });
+                    frame.on('close',function(){
+                        setTimeout(function(){
+                            if(window.UIC_ACTIVE_MEDIA_FRAME===frame)window.UIC_ACTIVE_MEDIA_FRAME=null;
+                            if(window.UIC_CONTEXT&&window.UIC_CONTEXT.frame===frame)window.UIC_CONTEXT=null;
+                        },100);
                     });
                     frame.open();
                 });
             });
+
             document.querySelectorAll('[data-gos-media-clear]').forEach(function(button){
                 button.addEventListener('click',function(){
                     var target=button.getAttribute('data-gos-media-clear');
                     var input=document.getElementById(target);
                     var preview=document.querySelector('[data-gos-preview="'+target+'"]');
                     input.value='0';
-                    if(preview) preview.innerHTML='<span>未設定</span>';
+                    if(preview) preview.innerHTML='<span>'+(button.getAttribute('data-gos-clear-label')||'未設定')+'</span>';
                 });
             });
+
+            syncRange(document);
         })();
         </script>
+        <?php
+    }
+
+    private static function range_field($name, $label, $value, $min, $max, $unit) {
+        $id = 'gos-' . sanitize_html_class(str_replace(['[', ']'], ['-', ''], $name));
+        ?>
+        <label for="<?php echo esc_attr($id); ?>" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span><?php echo esc_html($label); ?></span>
+            <span style="display:flex;align-items:center;gap:6px;">
+                <input id="<?php echo esc_attr($id); ?>" type="range" min="<?php echo esc_attr($min); ?>" max="<?php echo esc_attr($max); ?>" value="<?php echo esc_attr($value); ?>" data-gos-range>
+                <input type="number" min="<?php echo esc_attr($min); ?>" max="<?php echo esc_attr($max); ?>" name="<?php echo esc_attr($name); ?>" value="<?php echo esc_attr($value); ?>" data-gos-number style="width:80px;">
+                <em><?php echo esc_html($unit); ?></em>
+            </span>
+        </label>
         <?php
     }
 
@@ -127,13 +183,13 @@ final class GOS_Slider_Admin {
                 <?php if ($mobile_url): ?><img src="<?php echo esc_url($mobile_url); ?>" alt="" style="width:100%;height:180px;object-fit:cover;display:block;"><?php else: ?><span>PC画像を使用</span><?php endif; ?>
             </div>
             <input id="<?php echo esc_attr($mobile_input); ?>" type="hidden" name="slides[<?php echo (int)$slot; ?>][mobile_image_id]" value="<?php echo esc_attr($mobile_id); ?>">
-            <p><button type="button" class="button" data-gos-media-select="<?php echo esc_attr($mobile_input); ?>">画像を変更</button> <button type="button" class="button-link-delete" data-gos-media-clear="<?php echo esc_attr($mobile_input); ?>">PC画像を使用</button></p>
+            <p><button type="button" class="button" data-gos-media-select="<?php echo esc_attr($mobile_input); ?>">画像を変更</button> <button type="button" class="button-link-delete" data-gos-media-clear="<?php echo esc_attr($mobile_input); ?>" data-gos-clear-label="PC画像を使用">PC画像を使用</button></p>
 
             <?php if (!$pc_id): ?><div class="notice notice-warning inline"><p>PC画像が未設定のため、このスロットはテーマ側で表示されません。</p></div><?php endif; ?>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
-                <label>左右位置<br><input type="range" min="0" max="100" value="<?php echo esc_attr((int)($mobile['position_x'] ?? 50)); ?>" oninput="this.nextElementSibling.value=this.value"><input type="number" min="0" max="100" name="slides[<?php echo (int)$slot; ?>][position_x]" value="<?php echo esc_attr((int)($mobile['position_x'] ?? 50)); ?>" style="width:70px;"> %</label>
-                <label>上下位置<br><input type="range" min="0" max="100" value="<?php echo esc_attr((int)($mobile['position_y'] ?? 50)); ?>" oninput="this.nextElementSibling.value=this.value"><input type="number" min="0" max="100" name="slides[<?php echo (int)$slot; ?>][position_y]" value="<?php echo esc_attr((int)($mobile['position_y'] ?? 50)); ?>" style="width:70px;"> %</label>
+                <?php self::range_field("slides[$slot][position_x]", '表示位置・左右', (int)($mobile['position_x'] ?? 50), 0, 100, '%'); ?>
+                <?php self::range_field("slides[$slot][position_y]", '表示位置・上下', (int)($mobile['position_y'] ?? 50), 0, 100, '%'); ?>
             </div>
         </section>
         <?php
@@ -147,10 +203,6 @@ final class GOS_Slider_Admin {
         exit;
     }
 
-    /**
-     * While both plugins coexist, remove the duplicated top-slider controls from
-     * the legacy screen. Other mobile-layout settings remain available there.
-     */
     public static function legacy_screen_handoff() {
         if (!current_user_can('manage_options')) return;
         if (empty($_GET['page']) || sanitize_key((string)$_GET['page']) !== 'mobile-layout-manager') return;
