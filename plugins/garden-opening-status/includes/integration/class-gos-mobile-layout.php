@@ -110,44 +110,65 @@ final class GOS_Mobile_Layout {
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="gos-mobile-form">
                 <input type="hidden" name="action" value="gos_mobile_layout_save">
                 <?php wp_nonce_field(self::NONCE); ?>
-                <div style="max-width:900px;background:#fff;border:1px solid #dcdcde;padding:18px 20px;margin-top:18px;">
+                <section style="max-width:960px;background:#fff;border:1px solid #dcdcde;padding:18px 20px;margin-top:18px;">
                     <label style="display:block;margin-bottom:18px;"><input type="checkbox" name="enabled" value="1" <?php checked($o['enabled'], 1); ?>> <strong>モバイル表示の上書きを有効にする</strong></label>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;">
-                        <?php self::number_field('breakpoint', 'スマホ切替幅', $o['breakpoint'], 480, 1200, 'px'); ?>
-                        <?php self::number_field('global_side_padding', '左右余白', $o['global_side_padding'], 0, 60, 'px'); ?>
-                        <?php self::number_field('global_font_scale', '本文文字倍率', $o['global_font_scale'], 70, 160, '%'); ?>
-                        <?php self::number_field('global_heading_scale', '見出し文字倍率', $o['global_heading_scale'], 70, 180, '%'); ?>
-                        <?php self::number_field('button_min_height', 'ボタン最小高さ', $o['button_min_height'], 32, 80, 'px'); ?>
+                    <p class="description">オフにすると、テーマ本来の表示へすぐ戻ります。</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;">
+                        <?php self::range_field('breakpoint', 'スマホ切替幅', $o['breakpoint'], 480, 1200, 'px'); ?>
+                        <?php self::range_field('global_side_padding', '左右余白', $o['global_side_padding'], 0, 60, 'px'); ?>
+                        <?php self::range_field('global_font_scale', '本文文字倍率', $o['global_font_scale'], 70, 160, '%'); ?>
+                        <?php self::range_field('global_heading_scale', '見出し文字倍率', $o['global_heading_scale'], 70, 180, '%'); ?>
+                        <?php self::range_field('button_min_height', 'ボタン最小高さ', $o['button_min_height'], 32, 80, 'px'); ?>
                     </div>
-                </div>
+                </section>
                 <?php submit_button('モバイル設定を保存'); ?>
-                <button type="button" class="button" id="gos-mobile-preview-button">編集中の設定でスマホプレビュー</button>
+                <button type="button" class="button button-secondary" id="gos-mobile-preview-button">編集中の設定でスマホプレビュー</button>
                 <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=' . GOS_Slider_Admin::PAGE)); ?>">トップスライダー管理</a>
             </form>
         </div>
         <script>
         (function(){
+          'use strict';
+          var form=document.getElementById('gos-mobile-form');
+          if(!form)return;
+
+          form.querySelectorAll('[data-gos-mobile-range]').forEach(function(range){
+            var number=range.parentNode.querySelector('[data-gos-mobile-number]');
+            if(!number)return;
+            range.addEventListener('input',function(){number.value=range.value;});
+            number.addEventListener('input',function(){range.value=number.value;});
+          });
+
           var button=document.getElementById('gos-mobile-preview-button');
-          if(!button)return;
-          button.addEventListener('click',function(){
-            var form=document.getElementById('gos-mobile-form');
+          if(button)button.addEventListener('click',function(){
             var data=new FormData(form);
             data.set('action','gos_mobile_layout_preview_draft');
             data.set('nonce',<?php echo wp_json_encode(wp_create_nonce(self::PREVIEW_NONCE)); ?>);
-            fetch(ajaxurl,{method:'POST',credentials:'same-origin',body:data}).then(function(r){return r.json()}).then(function(res){
-              if(!res||!res.success){alert('プレビュー設定を保存できませんでした。');return;}
-              window.open(<?php echo wp_json_encode(admin_url('admin.php?page=' . self::PREVIEW_PAGE)); ?>,'_blank','noopener');
-            });
+            var win=window.open('about:blank','gosMobilePreview');
+            if(win)win.document.write('<p style="font-family:sans-serif;padding:20px">プレビューを準備しています…</p>');
+            fetch(ajaxurl,{method:'POST',credentials:'same-origin',body:data})
+              .then(function(r){return r.json();})
+              .then(function(res){
+                if(!res||!res.success){if(win)win.close();alert('プレビュー設定を保存できませんでした。');return;}
+                var url=<?php echo wp_json_encode(admin_url('admin.php?page=' . self::PREVIEW_PAGE)); ?>+'&mlm_draft='+Date.now();
+                if(win)win.location=url;else window.location=url;
+              });
           });
         })();
         </script>
         <?php
     }
 
-    private static function number_field($name, $label, $value, $min, $max, $unit) {
+    private static function range_field($name, $label, $value, $min, $max, $unit) {
+        $id = 'gos-mobile-' . sanitize_html_class(str_replace(['[', ']'], ['-', ''], $name));
         ?>
-        <label><?php echo esc_html($label); ?><br>
-            <input type="number" name="<?php echo esc_attr($name); ?>" min="<?php echo (int)$min; ?>" max="<?php echo (int)$max; ?>" value="<?php echo esc_attr((int)$value); ?>" style="width:100px;"> <?php echo esc_html($unit); ?>
+        <label for="<?php echo esc_attr($id); ?>" style="display:block;">
+            <span style="display:block;font-weight:600;margin-bottom:6px;"><?php echo esc_html($label); ?></span>
+            <span style="display:flex;align-items:center;gap:8px;">
+                <input id="<?php echo esc_attr($id); ?>" type="range" min="<?php echo esc_attr($min); ?>" max="<?php echo esc_attr($max); ?>" value="<?php echo esc_attr($value); ?>" data-gos-mobile-range style="flex:1;min-width:120px;">
+                <input type="number" min="<?php echo esc_attr($min); ?>" max="<?php echo esc_attr($max); ?>" name="<?php echo esc_attr($name); ?>" value="<?php echo esc_attr($value); ?>" data-gos-mobile-number style="width:82px;">
+                <em><?php echo esc_html($unit); ?></em>
+            </span>
         </label>
         <?php
     }
@@ -186,7 +207,7 @@ final class GOS_Mobile_Layout {
         $base['global_side_padding'] = self::bounded_int($input['global_side_padding'] ?? 20, 0, 60);
         $base['button_min_height'] = self::bounded_int($input['button_min_height'] ?? 44, 32, 80);
         update_user_meta(get_current_user_id(), '_mlm_preview_draft', $base);
-        wp_send_json_success();
+        wp_send_json_success(['message' => 'プレビューへ一時反映しました。']);
     }
 
     public static function preview_page() {
@@ -195,18 +216,41 @@ final class GOS_Mobile_Layout {
         if (!$url || strpos($url, home_url('/')) !== 0) $url = home_url('/');
         $preview_url = add_query_arg('mlm_preview', '1', $url);
         ?>
-        <div class="wrap">
+        <div class="wrap gos-mobile-preview-wrap">
             <h1>スマホ実画面プレビュー</h1>
             <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                 <input type="hidden" name="page" value="<?php echo esc_attr(self::PREVIEW_PAGE); ?>">
-                <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=' . self::PAGE)); ?>">設定へ戻る</a>
+                <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=' . self::PAGE)); ?>">← 設定画面に戻る</a>
                 <input type="url" name="url" value="<?php echo esc_attr($url); ?>" class="regular-text">
                 <button class="button button-primary">表示</button>
+                <button type="button" class="button" id="gos-mobile-rotate">縦横切替</button>
+                <button type="button" class="button" id="gos-mobile-reload">再読込</button>
+                <a class="button" target="_blank" rel="noopener" href="<?php echo esc_url($preview_url); ?>">実画面を別タブで開く</a>
             </form>
-            <div style="width:390px;max-width:calc(100vw - 40px);height:844px;max-height:calc(100vh - 150px);margin:0 auto;background:#fff;border:10px solid #222;border-radius:28px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.2);">
-                <iframe src="<?php echo esc_url($preview_url); ?>" title="スマホ実画面プレビュー" style="width:100%;height:100%;border:0;"></iframe>
+            <div id="gos-mobile-device-shell" data-orientation="portrait" style="width:390px;max-width:calc(100vw - 40px);height:844px;max-height:calc(100vh - 150px);margin:0 auto;background:#fff;border:10px solid #222;border-radius:28px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.2);transition:width .2s,height .2s;">
+                <iframe id="gos-mobile-preview-frame" src="<?php echo esc_url($preview_url); ?>" title="スマホ実画面プレビュー" style="width:100%;height:100%;border:0;"></iframe>
             </div>
         </div>
+        <script>
+        (function(){
+          'use strict';
+          var shell=document.getElementById('gos-mobile-device-shell');
+          var frame=document.getElementById('gos-mobile-preview-frame');
+          var rotate=document.getElementById('gos-mobile-rotate');
+          var reload=document.getElementById('gos-mobile-reload');
+          if(rotate&&shell)rotate.addEventListener('click',function(){
+            var landscape=shell.getAttribute('data-orientation')==='landscape';
+            shell.setAttribute('data-orientation',landscape?'portrait':'landscape');
+            shell.style.width=landscape?'390px':'844px';
+            shell.style.height=landscape?'844px':'390px';
+          });
+          if(reload&&frame)reload.addEventListener('click',function(){
+            var u=new URL(frame.src,window.location.href);
+            u.searchParams.set('_mlm_reload',String(Date.now()));
+            frame.src=u.toString();
+          });
+        })();
+        </script>
         <?php
     }
 
@@ -233,7 +277,7 @@ final class GOS_Mobile_Layout {
         <p><label>見出し倍率<br><input type="number" name="gos_mobile_post_heading_scale" value="<?php echo esc_attr($heading ?: 100); ?>" min="70" max="180">%</label></p>
         <p><label>左右余白<br><input type="number" name="gos_mobile_post_side_padding" value="<?php echo esc_attr($padding !== '' ? $padding : 20); ?>" min="0" max="60">px</label></p>
         <p><label><input type="checkbox" name="gos_mobile_hide_thumbnail" value="1" <?php checked($hide_thumb, 1); ?>> スマホでアイキャッチを隠す</label></p>
-        <p><a class="button" target="_blank" rel="noopener" href="<?php echo esc_url(admin_url('admin.php?page=' . self::PREVIEW_PAGE . '&url=' . rawurlencode(get_permalink($post)))); ?>">スマホプレビュー</a></p>
+        <p><a class="button" target="_blank" rel="noopener" href="<?php echo esc_url(admin_url('admin.php?page=' . self::PREVIEW_PAGE . '&url=' . rawurlencode(get_permalink($post)))); ?>">スマホ実画面プレビュー</a></p>
         <?php
     }
 
