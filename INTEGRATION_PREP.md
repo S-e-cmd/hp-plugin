@@ -1,65 +1,60 @@
-# 機能統合に向けた準備
+# モバイル表示機能の統合
 
-開催情報管理とモバイル表示管理はいきなり統合しない。まずトップスライダー部分だけについて、既存の保存先と責務を壊さずに受け渡せる形を作る。
+旧「モバイル表示管理」の機能は、開催情報管理へ統合する。
 
-## 今回の対象
+## 保存データ
 
-最初の統合対象はトップスライダー管理だけ。
+既存サイトの設定をそのまま引き継ぐため、保存先は変更しない。
 
-- PC画像: テーマの `dp_options` / `slider_image1`〜`slider_image3`
-- スマホ画像・位置: `mlm_options['slider']`
-- スマホ側有効状態: `mlm_options['top_enabled']`
-- 切替幅: `mlm_options['breakpoint']`
+- PCスライダー画像: `dp_options` / `slider_image1`〜`slider_image3`
+- スマホスライダー画像・位置: `mlm_options['slider']`
+- スマホスライダー有効状態: `mlm_options['top_enabled']`
+- モバイル表示全体設定: `mlm_options`
+- ページ別設定: `_mlm_*` 投稿メタ
 
-投稿・固定ページごとのモバイル補正、文字倍率、余白、ボタン高さ、`_mlm_*` 投稿メタは今回の統合対象に含めない。
+設定値のコピーや一括移行は不要。
 
-## 現在の表示契約
+## 開催情報管理へ移した機能
 
-PC画像が未設定のslotはテーマ側でスライド自体が生成されない。スマホ画像だけを設定しても独立したスライドとして追加しない。
+- PC/スマホのトップスライダー画像管理
+- スマホ画像の左右・上下位置
+- スマホ切替幅
+- トップスライダーのスマホ画像描画
+- 本文文字倍率
+- 見出し文字倍率
+- 左右余白
+- ボタン最小高さ
+- 投稿・固定ページ・お知らせ単位のスマホ上書き
+- スマホでのアイキャッチ非表示
+- スマホ実画面プレビュー
+- 管理バーのスマホプレビュー導線
 
-モバイル表示管理は現在、スマホ画像をCSSとJavaScriptの両方から再適用している。テーマ側の再描画対策なので、統合準備段階ではこの表示処理を変更しない。
-
-## 統合用の受け渡し口
-
-開催情報管理側には、既存設定を直接触る箇所を増やさないための最小限の読み取り口だけ置く。
+## 構成
 
 ```text
-plugins/garden-opening-status/includes/integration/
-├─ bootstrap.php
-├─ class-gos-legacy-slider-source.php
-├─ class-gos-slider-integration-state.php
-└─ class-gos-slider-integration.php
+plugins/garden-opening-status/
+├─ garden-opening-status.php        # WordPressプラグイン入口
+├─ garden-opening-status-core.php   # 3.3.2既存本体
+└─ includes/integration/
+   ├─ bootstrap.php
+   ├─ class-gos-legacy-slider-source.php
+   ├─ class-gos-slider-integration-state.php
+   ├─ class-gos-slider-settings.php
+   ├─ class-gos-slider-admin.php
+   ├─ class-gos-slider-frontend.php
+   ├─ class-gos-mobile-layout.php
+   └─ class-gos-slider-integration.php
 ```
 
-役割は以下だけ。
+既存3.3.2本体の内容は `garden-opening-status-core.php` へそのまま保持し、入口ファイルから統合モジュールを読み込む。既存本体のロジックへ統合コードを混在させない。
 
-- `GOS_Legacy_Slider_Source`: `dp_options` と `mlm_options` を読む
-- `GOS_Slider_Integration_State`: PC/スマホの差を吸収して同じ形へ揃える
-- `GOS_Slider_Integration::read()`: 今後の統合側が使う入口
-- `bootstrap.php`: 上記3クラスを読み込むだけ
+## 旧プラグイン
 
-診断・readiness・contract・view-modelのような準備専用レイヤーは持たない。必要になった機能は、実際の統合工程で必要な場所に追加する。
+`plugins/mobile-layout-manager/` は統合後の重複を避けるため削除した。
+Git履歴には残るため、旧実装の確認が必要な場合は過去コミットを参照できる。
 
-## 現段階で変えないもの
+## 表示契約
 
-- `dp_options` の保存形式
-- `mlm_options` の保存形式
-- 公開画面のスライダー表示
-- モバイル表示管理のフック
-- 管理画面メニュー
-- 旧プラグインの有効状態
-- 開催情報管理3.3.2の既存機能
+テーマ側でPC画像が未設定のスロットは、スマホ画像だけが設定されていても新しいスライドとして追加しない。
 
-## 次の実装順
-
-1. 開催情報管理本体からintegration bootstrapを読み込む
-2. 開催情報管理に「トップスライダー管理」の画面枠を追加し、まず現在値を表示する
-3. PC画像3枠を同画面から変更できるようにする
-4. スマホ画像・位置設定を同画面へ移す
-5. 表示処理の所有権を開催情報管理へ切り替える
-6. モバイル表示管理からトップスライダー機能を削除する
-7. モバイル表示管理に他の機能が残らなければプラグイン自体を外す
-
-切替途中で新旧の両方が同じスライダーを上書きする状態は作らない。
-
-現段階は「統合コードを増やす段階」ではなく、「現在の保存値を一つの入口から読める状態にして、次の画面統合へ進める段階」とする。
+スマホ画像はテーマ側スライダーの再描画後にも再適用する。MutationObserverとスライダーイベント監視は、旧実装で必要だった挙動を維持する。
