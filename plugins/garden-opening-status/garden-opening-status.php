@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-require_once __DIR__ . '/garden-opening-status-core.php';
+require_once __DIR__ . '/includes/garden-opening-status-core.php';
 require_once __DIR__ . '/includes/integration/bootstrap.php';
 
 GOS_Slider_Integration::register();
