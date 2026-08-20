@@ -40,6 +40,22 @@ final class GOS_Slider_Integration {
     }
 
     /**
+     * Return display-ready values for the future read-only admin panel.
+     *
+     * @return array
+     */
+    public static function view() {
+        if (!class_exists('GOS_Slider_Integration_View')) {
+            return [
+                'read_only' => true,
+                'available' => false,
+                'slides' => [],
+            ];
+        }
+        return GOS_Slider_Integration_View::read();
+    }
+
+    /**
      * Preparation phase is intentionally read-only.
      *
      * @return bool
