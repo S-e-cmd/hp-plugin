@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.3.1
+ * Version: 3.3.2
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.3.1';
+    const VERSION = '3.3.2';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -23,6 +23,7 @@ final class Garden_Opening_Status_V3 {
         add_action('plugins_loaded', [__CLASS__, 'maybe_migrate']);
         add_action('admin_menu', [__CLASS__, 'admin_menu']);
         add_action('admin_init', [__CLASS__, 'handle_save']);
+        add_action('gos_v3_scheduled_publish', [__CLASS__, 'scheduled_publish_cache_purge'], 10, 1);
         add_action('admin_enqueue_scripts', [__CLASS__, 'admin_assets']);
         add_action('wp_ajax_gos_v3_preview_save', [__CLASS__, 'ajax_preview_save']);
         add_action('wp_ajax_gos_v3_layout_templates_save', [__CLASS__, 'ajax_layout_templates_save']);
@@ -2063,10 +2064,42 @@ final class Garden_Opening_Status_V3 {
         update_option(self::OPTION, $clean, false);
         update_option(self::VERSION_OPTION, self::VERSION, false);
 
+        // 指定日時公開は公開時刻にもキャッシュを更新できるよう、会期ごとに単発cronを張り直す。
+        self::schedule_publish_cache_purges($clean);
+
         // 公開ページは最終HTMLへ反映するため、固定ページ本文は変更しない。
         self::purge_public_caches($clean);
         wp_safe_redirect(add_query_arg(['page' => 'garden-opening-status', 'updated' => '1'], admin_url('admin.php')));
         exit;
+    }
+
+    private static function schedule_publish_cache_purges($options) {
+        $now = self::now();
+        foreach (self::event_keys() as $season) {
+            $args = [$season];
+            while ($timestamp = wp_next_scheduled('gos_v3_scheduled_publish', $args)) {
+                wp_unschedule_event($timestamp, 'gos_v3_scheduled_publish', $args);
+            }
+
+            $event = self::event_from_options($options, $season);
+            if (sanitize_key((string)($event['publish_mode'] ?? 'immediate')) !== 'scheduled') continue;
+            $at = self::publish_dt($event['publish_at'] ?? '');
+            if (!$at || $at <= $now) continue;
+
+            wp_schedule_single_event($at->getTimestamp(), 'gos_v3_scheduled_publish', $args, true);
+        }
+    }
+
+    public static function scheduled_publish_cache_purge($season = '') {
+        $season = sanitize_key((string)$season);
+        if (!self::is_event_key($season)) return;
+
+        $options = self::options(false);
+        $event = self::event_from_options($options, $season);
+        if (sanitize_key((string)($event['publish_mode'] ?? 'immediate')) !== 'scheduled') return;
+        if (!self::event_released($event, self::now())) return;
+
+        self::purge_public_caches($options);
     }
 
     private static function purge_public_caches($options) {
