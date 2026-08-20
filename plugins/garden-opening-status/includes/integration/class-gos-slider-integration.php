@@ -1,9 +1,10 @@
 <?php
 /**
- * Read-only facade for top-slider integration preparation.
+ * Stable read-only entry point for the future top-slider integration.
  *
- * This class provides one stable entry point for future admin UI and migration
- * code. It does not register hooks, write options, or change frontend output.
+ * Preparation only. Existing theme/mobile options remain the sources of truth.
+ * This class does not register hooks, write options, migrate data, or change
+ * frontend output.
  *
  * @package Garden_Opening_Status
  */
@@ -12,73 +13,23 @@ if (!defined('ABSPATH')) exit;
 
 final class GOS_Slider_Integration {
     /**
-     * Return the complete preparation snapshot.
+     * Return the normalized current slider state.
+     *
+     * Future integration code should read through this method instead of
+     * reaching into dp_options or mlm_options directly.
      *
      * @return array
      */
-    public static function snapshot() {
-        return [
-            'guard' => GOS_Slider_Integration_Guard::status(),
-            'state' => GOS_Slider_Integration_State::read(),
-            'diagnostics' => GOS_Slider_Integration_Diagnostics::inspect(),
-        ];
+    public static function read() {
+        return GOS_Slider_Integration_State::read();
     }
 
     /**
-     * Return the snapshot together with contract validation.
-     *
-     * This remains read-only and is intended for the first integration UI so it
-     * can refuse to proceed when the expected legacy/theme shape has drifted.
-     *
-     * @return array
-     */
-    public static function validated_snapshot() {
-        $snapshot = self::snapshot();
-        $snapshot['contract'] = GOS_Slider_Integration_Contract::schema();
-        $snapshot['validation'] = GOS_Slider_Integration_Contract::validate($snapshot);
-        return $snapshot;
-    }
-
-    /**
-     * Return display-ready values for the future read-only admin panel.
-     *
-     * @return array
-     */
-    public static function view() {
-        if (!class_exists('GOS_Slider_Integration_View')) {
-            return [
-                'read_only' => true,
-                'available' => false,
-                'slides' => [],
-            ];
-        }
-        return GOS_Slider_Integration_View::read();
-    }
-
-    /**
-     * Return whether the installation is ready for the first read-only
-     * connection from the main plugin.
-     *
-     * @return array
-     */
-    public static function readiness() {
-        if (!class_exists('GOS_Slider_Integration_Readiness')) {
-            return [
-                'phase' => 1,
-                'ready' => false,
-                'read_only' => true,
-                'blockers' => ['readiness_class_unavailable'],
-            ];
-        }
-        return GOS_Slider_Integration_Readiness::inspect();
-    }
-
-    /**
-     * Preparation phase is intentionally read-only.
+     * Preparation remains read-only until the actual ownership switch.
      *
      * @return bool
      */
     public static function is_read_only() {
-        return GOS_Slider_Integration_Guard::is_read_only();
+        return true;
     }
 }
