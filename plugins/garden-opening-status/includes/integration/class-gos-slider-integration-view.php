@@ -49,7 +49,7 @@ final class GOS_Slider_Integration_View {
 
         return [
             'read_only' => true,
-            'contract_ok' => !empty($snapshot['contract']['ok']),
+            'contract_ok' => !empty($snapshot['validation']['ok']),
             'mobile_enabled' => !empty($state['mobile_enabled']),
             'breakpoint' => self::bounded_int($state['breakpoint'] ?? 767, 480, 1200),
             'slides' => $view_slides,
