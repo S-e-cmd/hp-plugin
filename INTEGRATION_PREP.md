@@ -98,8 +98,10 @@ JavaScript側は MutationObserver とスライダーイベントを監視し、�
 
 ```text
 plugins/garden-opening-status/includes/integration/
+├─ bootstrap.php
 ├─ class-gos-legacy-slider-source.php
-└─ class-gos-slider-integration-state.php
+├─ class-gos-slider-integration-state.php
+└─ class-gos-slider-integration-guard.php
 ```
 
 ### `GOS_Legacy_Slider_Source`
@@ -133,8 +135,25 @@ slide
 
 現段階では `writes_enabled = false`、`legacy_required = true` とし、統合先からの保存や旧プラグイン停止を許可しない。
 
-この2クラスはまだ開催情報管理本体のbootstrapへ接続しない。
-追加しただけでは公開画面・管理画面・保存データへ影響しない状態を維持する。
+### `GOS_Slider_Integration_Guard`
+
+Phase 1以降で誤って書き込み・表示切替へ進まないよう、現在の統合許可状態を明示する。
+
+現段階の固定値:
+
+- `writes_allowed = false`
+- `frontend_takeover_allowed = false`
+- `migration_allowed = false`
+- `is_read_only() = true`
+
+併せて、`dp_options` / `mlm_options` が配列として存在するか、旧モバイル表示管理クラスがロード済みかだけを読み取り確認できる。
+
+### `bootstrap.php`
+
+上記3クラスだけをまとめて読み込む入口。
+`bootstrap.php` 自体にはWordPress hook登録・option更新・管理メニュー追加を置かない。
+
+このbootstrapはまだ開催情報管理本体からrequireしていないため、準備ブランチを配置しただけでは公開画面・管理画面・保存データへ影響しない。
 
 ## 統合候補
 
@@ -159,20 +178,32 @@ PC画像は既存テーマの `dp_options` を正本として扱う。
 ### Phase 0: 現在
 
 - 既存2プラグインは独立稼働
-- 新規integrationクラスは未ロード
+- integration用bootstrapと読み取りクラスを準備済み
+- 開催情報管理本体からは未ロード
 - 既存保存先を変更しない
 - 公開フックを変更しない
+- Guardで書き込み・frontend takeover・migrationを明示的に禁止
 
 ### Phase 1: 読み取り接続
 
-開催情報管理からintegrationクラスをロードするが、表示・保存にはまだ利用しない。
+開催情報管理からintegration `bootstrap.php` をロードするが、表示・保存にはまだ利用しない。
+
+予定する本体変更は1か所だけ:
+
+```php
+require_once __DIR__ . '/includes/integration/bootstrap.php';
+```
+
+このrequire以外のフック追加・画面追加・保存処理変更は同じ変更に含めない。
 
 完了条件:
 
+- integration 3クラスがロードされる
 - クラスロードだけで公開HTMLが変化しない
 - option更新が発生しない
 - WordPress管理メニューが増えない
 - 旧モバイル表示管理の動作が完全に維持される
+- Guardが `writes_allowed = false` のまま
 
 ### Phase 2: 読み取り専用UI
 
@@ -184,6 +215,7 @@ PC画像は既存テーマの `dp_options` を正本として扱う。
 - テーマオプションのPC画像と一致
 - モバイル表示管理のスマホ画像・位置と一致
 - 未設定slotの扱いが現行表示と一致
+- UIからPOST/option更新経路を持たない
 
 ### Phase 3: PC画像編集
 
@@ -245,19 +277,13 @@ PC画像は既存テーマの `dp_options` を正本として扱う。
 - テーマの `dp_options` 書き換え実装
 - 旧プラグイン停止処理
 - 開催情報管理本体の大規模分割
-- integrationクラスのbootstrap接続
+- integration bootstrapからのhook登録
+- integrationクラスからのoption更新
 
-## 次段階へ進む条件
+## 次段階
 
-以下を確認してから実装へ進む。
-
-1. PCスライダーの保存・表示契約を確定
-2. スマホ専用画像の既存表示経路を確定
-3. 二重適用を防ぐ切替条件を決定
-4. `mlm_options` からの移行方法を決定
-5. 旧プラグインを停止できる完了条件を決定
-
-1〜3はこの準備ブランチで整理済み。
-次はPhase 1の「読み取り接続」へ進めるが、接続時にも公開処理・保存処理・UIは変更しない。
+Phase 0の準備物は揃った。
+次はPhase 1として、開催情報管理本体にintegration bootstrapの `require_once` だけを追加する。
+その変更ではバージョンアップ、UI、保存処理、frontend処理を同時に変更しない。
 
 この準備段階では、既存公開表示と保存データを変更しない。
