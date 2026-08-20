@@ -14,6 +14,7 @@ final class GOS_Slider_Integration {
         if (self::$registered) return;
         self::$registered = true;
         GOS_Slider_Admin::register_hooks();
+        GOS_Slider_Frontend::register_hooks();
     }
 
     public static function read() {
