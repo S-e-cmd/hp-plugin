@@ -12,3 +12,4 @@ if (!defined('ABSPATH')) exit;
 
 require_once __DIR__ . '/class-gos-legacy-slider-source.php';
 require_once __DIR__ . '/class-gos-slider-integration-state.php';
+require_once __DIR__ . '/class-gos-slider-integration-guard.php';
