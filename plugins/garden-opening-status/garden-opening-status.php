@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.2.97
+ * Version: 3.2.98
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.2.97';
+    const VERSION = '3.2.98';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -85,6 +85,7 @@ final class Garden_Opening_Status_V3 {
         add_action('wp_footer', [__CLASS__, 'instagram_gallery_fallback'], 97);
         add_action('wp_footer', [__CLASS__, 'multilingual_event_info_fallback'], 98);
         add_action('wp_footer', [__CLASS__, 'event_page_preview_fallback'], 100);
+        add_action('wp_footer', [__CLASS__, 'seasonal_mobile_bottom_spacer'], 101);
         add_action('wp_head', [__CLASS__, 'boot_hide'], 0);
         add_action('wp_head', [__CLASS__, 'front_styles'], 99);
         add_action('wp_footer', [__CLASS__, 'front_script'], 99);
@@ -708,7 +709,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.2.97 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.2.98 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -2359,7 +2360,6 @@ final class Garden_Opening_Status_V3 {
 
     public static function body_class($classes) {
         if (self::is_permanent_guide_page()) $classes[] = 'gos-permanent-guide-page';
-        if (self::current_event_page_season() !== '') $classes[] = 'gos-seasonal-event-page';
         if (self::is_any_preview()) {
             $device = sanitize_key($_GET['gos_preview_device'] ?? '');
             if ($device === 'mobile') $classes[] = 'gos-force-mobile';
@@ -2423,6 +2423,12 @@ final class Garden_Opening_Status_V3 {
         })();
         </script>
         <?php
+    }
+
+    public static function seasonal_mobile_bottom_spacer() {
+        if (is_admin() || self::current_event_page_season() === '') return;
+        echo '<div class="gos-seasonal-mobile-bottom-spacer" aria-hidden="true"></div>';
+        echo '<style>@media(max-width:782px){.gos-seasonal-mobile-bottom-spacer{display:block!important;height:calc(76px + env(safe-area-inset-bottom, 0px))!important;min-height:calc(76px + env(safe-area-inset-bottom, 0px))!important;flex:none!important;clear:both!important}}@media(min-width:783px){.gos-seasonal-mobile-bottom-spacer{display:none!important}}</style>';
     }
 
     private static function now() {
@@ -2677,7 +2683,6 @@ final class Garden_Opening_Status_V3 {
 
     public static function front_styles() {
         echo '<style id="gos-event-page-info-style">
-        @media(max-width:782px){body.gos-seasonal-event-page{padding-bottom:calc(76px + env(safe-area-inset-bottom, 0px))!important}}
         .gos-event-page-info{box-sizing:border-box;font-family:inherit;font-size:14px;font-weight:400;line-height:2;color:inherit}
         .gos-event-page-info__rows{display:block}
         .gos-event-page-info__row{display:grid;grid-template-columns:6.4em minmax(0,1fr);column-gap:0;margin:0 0 .55em;font:inherit;line-height:inherit}
