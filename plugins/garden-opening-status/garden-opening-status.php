@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 開催情報・開催状況管理
  * Description: 春・秋・冬の開催概要を一元管理し、各会期ページとトップページの開催状況へ共通出力します。
- * Version: 3.3.0
+ * Version: 3.3.1
  * Author: Site Admin
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) exit;
 final class Garden_Opening_Status_V3 {
     const OPTION = 'garden_opening_status_options';
     const VERSION_OPTION = 'garden_opening_status_version';
-    const VERSION = '3.3.0';
+    const VERSION = '3.3.1';
     const NONCE = 'gos_v3_save';
     const PREVIEW_NONCE = 'gos_v3_preview';
     const LAYOUTS_OPTION = 'gos_v3_layout_templates';
@@ -710,7 +710,7 @@ final class Garden_Opening_Status_V3 {
     public static function output_multilingual_seo_marker() {
         $language = self::information_page_language();
         if ($language !== 'en' && $language !== 'zh-Hant') return;
-        echo "<!-- Garden Opening Status 3.3.0 multilingual SEO active -->\n";
+        echo "<!-- Garden Opening Status 3.3.1 multilingual SEO active -->\n";
     }
 
     private static function localize_aioseo_multilingual_schema_node(&$node, $language, $seo) {
@@ -3169,23 +3169,6 @@ final class Garden_Opening_Status_V3 {
         $event = self::event_from_options($o, $season);
 
         $date_text = self::localized_event_date_text($event, $lang);
-        $date_value = $date_text;
-        if (
-            $lang === 'ja' &&
-            sanitize_key((string)($event['date_display_mode'] ?? 'usual')) === 'confirmed' &&
-            self::event_released($event, self::now())
-        ) {
-            $start_date = trim((string)($event['start'] ?? ''));
-            $end_date = trim((string)($event['end'] ?? ''));
-            if ($start_date !== '' && $end_date !== '') {
-                $date_value = [
-                    '__confirmed_mobile_range' => [
-                        self::format_date_with_weekday($start_date) . '～',
-                        self::format_date_with_weekday($end_date),
-                    ],
-                ];
-            }
-        }
         $open_text = self::format_time($event['open_time'] ?? '');
         $close_text = self::format_time($event['close_time'] ?? '');
         $separator = $lang === 'ja' ? '～' : '–';
@@ -3207,7 +3190,7 @@ final class Garden_Opening_Status_V3 {
         ];
 
         $rows = [];
-        if ($date_text !== '') $rows[] = [$labels[$lang]['date'], $date_value, ''];
+        if ($date_text !== '') $rows[] = [$labels[$lang]['date'], $date_text, ''];
         if ($time_text !== '') $rows[] = [$labels[$lang]['time'], $time_text, self::localize_event_info_text($event['time_note'] ?? '', $lang)];
         if ($price_lines) $rows[] = [$labels[$lang]['price'], $price_lines, self::localize_event_info_text($event['price_note'] ?? '', $lang)];
         if (!$rows) return '';
@@ -3220,9 +3203,7 @@ final class Garden_Opening_Status_V3 {
                     <div class="gos-event-page-info__row">
                         <span class="gos-event-page-info__label"><?php echo esc_html($label); ?><?php echo $lang === 'en' ? ':' : '：'; ?></span>
                         <span class="gos-event-page-info__value">
-                            <?php if (is_array($value) && isset($value['__confirmed_mobile_range'])): ?>
-                                <span class="gos-event-page-info__confirmed-date-start"><?php echo esc_html($value['__confirmed_mobile_range'][0]); ?></span><span class="gos-event-page-info__confirmed-date-end"><?php echo esc_html($value['__confirmed_mobile_range'][1]); ?></span>
-                            <?php elseif (is_array($value)): ?>
+                            <?php if (is_array($value)): ?>
                                 <?php foreach ($value as $line): ?><span class="gos-event-page-info__line"><?php echo esc_html($line); ?></span><?php endforeach; ?>
                             <?php else: ?>
                                 <?php echo nl2br(esc_html($value)); ?>
