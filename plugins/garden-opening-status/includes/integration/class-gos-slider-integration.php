@@ -1,6 +1,6 @@
 <?php
 /**
- * Top-slider integration entry point.
+ * Slider/mobile integration entry point.
  *
  * @package Garden_Opening_Status
  */
@@ -15,6 +15,7 @@ final class GOS_Slider_Integration {
         self::$registered = true;
         GOS_Slider_Admin::register_hooks();
         GOS_Slider_Frontend::register_hooks();
+        GOS_Mobile_Layout::register_hooks();
     }
 
     public static function read() {
